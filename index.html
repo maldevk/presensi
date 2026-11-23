@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Presensi Jam Kampus</title>
+<style>
+/* Hallmark · shape: app screen · genre: playful · theme: Hum (by request) · redesign: full
+ * nav: none, one screen · signature: the torn session sheet, returning as the receipt · states: loading, open, late, closed, error, sending, received
+ * axes: light/rounded-sans/chromatic-yellow · posture: full-palette · modes: light only (by request) · copy: edited, NIM input · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R4 V4 · weakest: R, the theme's plants and stickers were cut so only the session sheet is torn */
+/* Hallmark · finish-review: in-thread · 2 findings · 2 resolved · gap: none · render tier not run, screens checked in the browser pane */
+/* Hallmark · answered F23 · Apps Script ignores meta description in HTML files; doGet owns the document head */
+:root {
+  color-scheme: only light; /* "only" menolak mode gelap paksa peramban ponsel */
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1.0625rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-4xl: 2.488rem;
+  --dur-micro: 120ms;
+  --container: 64rem; --control: 52px; --control-primary: 54px;
+
+  --color-paper: oklch(97% 0.012 95); --color-paper-2: oklch(94.5% 0.018 95); --color-paper-3: oklch(91% 0.022 95);
+  --color-ink: oklch(20% 0.014 255); --color-muted: oklch(47% 0.014 255);
+  --color-rule: oklch(87% 0.016 95);
+  --color-card: oklch(98.8% 0.007 95); --color-edge: oklch(83% 0.04 88); --color-fringe: oklch(99.2% 0.006 95);
+  --color-accent: oklch(87% 0.175 96); --color-accent-deep: oklch(72% 0.16 92); --color-accent-ink: oklch(20% 0.014 255);
+  --color-focus: oklch(50% 0.17 250);
+  --color-mint: oklch(82% 0.15 152); --color-sand: oklch(77% 0.1 76); --color-accent-3: oklch(70% 0.2 22);
+  --color-on-fill: oklch(20% 0.014 255);
+  --color-error: oklch(50% 0.19 27); --color-error-paper: oklch(94% 0.035 27);
+
+  --font-display: "Chillax", ui-rounded, ui-sans-serif, system-ui, sans-serif; --font-body: var(--font-display);
+  --radius-card: 24px; --radius-stock: 16px; --radius-input: 14px;
+  --shadow-card: 0 1px 2px oklch(20% 0.014 255 / 0.06), 0 12px 28px -14px oklch(20% 0.014 255 / 0.22);
+  --shadow-paper: drop-shadow(0 0 0.6px oklch(20% 0.014 255 / 0.32)) drop-shadow(1.5px 2.5px 1.5px oklch(20% 0.014 255 / 0.1)) drop-shadow(6px 14px 16px oklch(20% 0.014 255 / 0.13));
+  --tracking-display: -0.03em; --display-weight: 600;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Garis miring di-encode: templat Apps Script memperlakukan dua garis miring berurutan sebagai komentar. */
+  --grain: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22160%22%20height%3D%22160%22%3E%3Cfilter%20id%3D%22g%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%22.85%22%20numOctaves%3D%222%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22saturate%22%20values%3D%220%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22160%22%20height%3D%22160%22%20filter%3D%22url(%23g)%22%20opacity%3D%22.07%22%2F%3E%3C%2Fsvg%3E");
+  --fibre: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22320%22%3E%3Cfilter%20id%3D%22f%22%3E%3CfeTurbulence%20type%3D%22turbulence%22%20baseFrequency%3D%22.012%20.22%22%20numOctaves%3D%222%22%20seed%3D%227%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22saturate%22%20values%3D%220%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22320%22%20height%3D%22320%22%20filter%3D%22url(%23f)%22%20opacity%3D%22.05%22%2F%3E%3C%2Fsvg%3E");
+  --torn: polygon(0 0, 100% 0, 100% calc(100% - 4px), 96% calc(100% - 1px), 91% calc(100% - 6px), 87% calc(100% - 3px), 82% calc(100% - 5px), 78% calc(100% - 1px), 73% calc(100% - 6px), 68% calc(100% - 3px), 64% calc(100% - 5px), 59% calc(100% - 2px), 55% calc(100% - 4px), 50% calc(100% - 7px), 45% calc(100% - 2px), 41% calc(100% - 6px), 36% calc(100% - 2px), 31% calc(100% - 5px), 27% calc(100% - 3px), 22% calc(100% - 7px), 18% calc(100% - 4px), 13% calc(100% - 6px), 9% calc(100% - 1px), 4% calc(100% - 5px), 0 calc(100% - 3px));
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { scrollbar-color: var(--color-muted) var(--color-paper); }
+body {
+  margin: 0; min-height: 100dvh; background: var(--grain), var(--fibre), var(--color-paper); color: var(--color-ink);
+  font-family: var(--font-body); font-size: var(--text-md); font-weight: 500; line-height: 1.5;
+  caret-color: var(--color-focus); -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--color-accent); color: var(--color-accent-ink); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; }
+
+main {
+  width: 100%; max-width: var(--container); margin-inline: auto;
+  padding: var(--space-lg) var(--space-md) var(--space-2xl);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); align-items: start;
+}
+h1 {
+  margin: 0; min-width: 0; overflow-wrap: break-word; text-wrap: balance;
+  font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--display-weight);
+  font-synthesis: none; letter-spacing: var(--tracking-display); line-height: 1.05;
+}
+.identitas { display: grid; gap: var(--space-md); min-width: 0; }
+.lembar { min-width: 0; }
+
+/* Lembar sobek: status sesi, lalu tanda terima */
+.sesi, .terima {
+  --sheet: var(--color-paper-3);
+  position: relative; isolation: isolate; color: var(--color-ink); filter: var(--shadow-paper);
+}
+.sesi::before, .sesi::after, .terima::before, .terima::after {
+  content: ""; position: absolute; z-index: -1; inset: 0; clip-path: var(--torn);
+  border-radius: var(--radius-stock) var(--radius-stock) 0 0;
+}
+.sesi::before, .terima::before { background: var(--color-fringe); }
+.sesi::after, .terima::after { bottom: var(--space-3xs); background: var(--grain), var(--fibre), var(--sheet); }
+.sesi { padding: var(--space-md) var(--space-md) var(--space-lg); font-size: var(--text-lg); font-weight: 600; line-height: 1.35; overflow-wrap: break-word; text-wrap: pretty; }
+.sesi.buka { --sheet: var(--color-mint); color: var(--color-on-fill); }
+.sesi.telat { --sheet: var(--color-sand); color: var(--color-on-fill); }
+.sesi.tutup { --sheet: var(--color-accent-3); color: var(--color-on-fill); }
+/* Kerangka formulir selama data awal dimuat */
+main:has(.sesi:not(.buka, .telat, .tutup)) .lembar::before {
+  content: ""; display: block; min-height: 30rem; border-radius: var(--radius-card); background: var(--color-paper-2);
+}
+
+form {
+  display: grid; gap: var(--space-md); padding: var(--space-lg) var(--space-md);
+  border-radius: var(--radius-card); background: var(--grain), var(--fibre), var(--color-card); box-shadow: var(--shadow-card);
+}
+.bidang { min-width: 0; }
+label { display: block; margin-bottom: var(--space-2xs); color: var(--color-muted); font-size: var(--text-sm); }
+input {
+  width: 100%; min-width: 0; height: var(--control); padding: 0 var(--space-md);
+  border: 1px solid var(--color-muted); border-radius: var(--radius-input);
+  background: var(--color-card); color: var(--color-ink);
+  outline: 2px solid transparent; outline-offset: -3px;
+}
+input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -3px; }
+input::placeholder { color: var(--color-muted); opacity: 1; font-size: var(--text-sm); }
+#nim { font-variant-numeric: tabular-nums; }
+.pemilik {
+  display: grid; align-content: center; min-height: 4.5rem; margin-top: var(--space-xs); padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-input); background: var(--color-paper-2); line-height: 1.35; overflow-wrap: anywhere;
+}
+.pemilik strong { font-size: var(--text-lg); font-weight: 600; }
+.pemilik strong:empty { display: none; }
+.pemilik span { color: var(--color-muted); font-size: var(--text-sm); }
+
+input[type="file"] { padding: var(--space-2xs); color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; }
+input[type="file"]::file-selector-button {
+  height: 100%; margin: 0 var(--space-sm) 0 0; padding: 0 var(--space-md); border: 0; border-radius: var(--radius-input);
+  background: var(--grain), var(--fibre), var(--color-paper-3); color: var(--color-ink);
+  box-shadow: inset 0 -3px 0 var(--color-edge); font: inherit; font-weight: 600; cursor: pointer;
+}
+input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var(--color-edge); }
+.bantu { min-height: 1lh; margin-top: var(--space-2xs); color: var(--color-muted); font-size: var(--text-sm); text-wrap: pretty; }
+#pratinjau { display: block; width: 10rem; max-width: 100%; height: auto; margin-top: var(--space-sm); border-radius: var(--radius-stock); }
+
+.pesan { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-input); text-wrap: pretty; }
+.pesan.tunggu { background: var(--color-paper-2); color: var(--color-ink); }
+.pesan.galat { background: var(--color-error-paper); color: var(--color-error); }
+
+.btn--primary {
+  --edge: 5px;
+  position: relative; min-height: var(--control-primary); margin-bottom: var(--space-2xs); padding: 0 var(--space-lg);
+  border: 0; border-radius: var(--radius-stock); font-weight: 600; white-space: nowrap; cursor: pointer; touch-action: manipulation;
+  background: var(--grain), var(--fibre), var(--color-accent); color: var(--color-accent-ink);
+  box-shadow: 0 var(--edge) 0 0 var(--color-accent-deep);
+  transition: translate var(--dur-micro) var(--ease-spring), box-shadow var(--dur-micro) var(--ease-snap);
+}
+.btn--primary:active { --edge: 1px; translate: 0 4px; }
+.btn--primary:disabled, .btn--primary:disabled:active {
+  --edge: 1px; translate: 0 4px; cursor: not-allowed;
+  background: var(--color-paper-3); color: var(--color-muted); box-shadow: 0 var(--edge) 0 0 var(--color-edge);
+}
+
+.terima { --sheet: var(--color-mint); color: var(--color-on-fill); padding: var(--space-lg) var(--space-md) var(--space-xl); }
+.terima strong { display: block; font-size: var(--text-xl); font-weight: 600; line-height: 1.2; }
+.terima dl { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: var(--space-md) 0 0; }
+.terima dt, .terima dd { margin: 0; padding-block: var(--space-xs); border-top: 1px dashed var(--color-on-fill); }
+.terima dt { padding-right: var(--space-md); font-weight: 600; }
+.terima dd { overflow-wrap: break-word; font-variant-numeric: tabular-nums; }
+
+@media (hover: hover) {
+  input:not(:disabled):hover { background: var(--color-paper-2); }
+  .btn--primary:not(:disabled, :active):hover { --edge: 7px; translate: 0 -2px; }
+}
+@media (max-width: 22rem) {
+  input::placeholder { font-size: var(--text-xs); }
+}
+@media (min-width: 52rem) {
+  main { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--space-2xl); padding: var(--space-2xl) var(--space-xl); }
+  h1 { max-width: 16ch; font-size: var(--text-4xl); }
+  .identitas { gap: var(--space-lg); }
+  form, .terima { padding-inline: var(--space-lg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn--primary { transition: none; }
+  .btn--primary:active, .btn--primary:disabled, .btn--primary:not(:disabled, :active):hover { translate: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="identitas">
+    <h1>Presensi Jam Kampus</h1>
+    <div id="sesi" class="sesi" role="status">Memuat…</div>
+  </div>
+
+  <div class="lembar">
+  <form id="form" novalidate hidden>
+    <div class="bidang">
+      <label for="nim">NIM</label>
+      <input id="nim" name="nim" type="text" inputmode="numeric" placeholder="14 angka" aria-describedby="pemilik">
+      <div id="pemilik" class="pemilik" aria-live="polite" aria-atomic="true">
+        <strong id="p-nama"></strong>
+        <span id="p-ket">Nama dan kelas akan muncul di sini.</span>
+      </div>
+    </div>
+
+    <div class="bidang">
+      <label for="foto">Foto Timemark</label>
+      <input id="foto" type="file" accept="image/jpeg,image/png" aria-describedby="bantu-foto">
+      <div class="bantu" id="bantu-foto">Foto wajah dan kartu identitas, rasio 1:1, dari aplikasi Timemark.</div>
+      <img id="pratinjau" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" alt="Pratinjau foto yang dipilih" hidden>
+    </div>
+
+    <div id="pesan" class="pesan" role="alert" hidden></div>
+    <button id="kirim" class="btn--primary" type="submit">Kirim presensi</button>
+  </form>
+
+  <section id="terima" class="terima" hidden tabindex="-1">
+    <strong>Presensi tercatat.</strong>
+    <dl>
+      <dt>Nama</dt><dd id="t-nama"></dd>
+      <dt>NIM</dt><dd id="t-nim"></dd>
+      <dt>Sesi</dt><dd id="t-sesi"></dd>
+      <dt>Status</dt><dd id="t-status"></dd>
+      <dt>Jam</dt><dd id="t-jam"></dd>
+    </dl>
+  </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+// shortcut: URL deployment tertanam; ganti di sini jika membuat deployment baru (Kelola deployment → Edit versi tidak mengubahnya).
+const SERVER = 'https://script.google.com/macros/s/AKfycbyF3LUQ9LupXpmlom3z88jIXy7guxMEKHeDHdPPX7JaTflgaFMrigAdvcOmJw26hzKcGQ/exec';
+// Badan teks biasa = permintaan "sederhana", tanpa preflight CORS yang tidak dilayani Apps Script.
+// Halaman galat Google (bukan JSON) dan { galat } sama-sama dilempar, jadi panggilUlang mengulanginya.
+async function panggil(fn, ...arg) {
+  const r = await fetch(SERVER, { method: 'POST', body: JSON.stringify({ fn, arg }) });
+  const d = await r.json();
+  if ('galat' in d) throw new Error(d.galat);
+  return d.hasil;
+}
+
+// Saat 30 eksekusi pemilik penuh, Google langsung menolak. Jeda acak menyebar percobaan ulang supaya tidak menabrak bersamaan.
+// Penolakan sengaja (NIM ganda, sesi tutup) datang sebagai nilai { tolak } dan tidak diulang. Totalnya ±4–5 menit.
+const JEDA_ULANG = [2, 4, 8, 15, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]; // detik
+async function panggilUlang(fn, arg, saatMenunggu, masih = () => true) {
+  for (let i = 0; ; i++) {
+    try {
+      return await panggil(fn, ...(typeof arg === 'function' ? arg() : arg)); // fungsi = dihitung ulang tiap percobaan
+    } catch (e) {
+      if (i >= JEDA_ULANG.length || !masih()) throw e;
+      saatMenunggu();
+      await new Promise(ok => setTimeout(ok, JEDA_ULANG[i] * 1000 * (0.5 + Math.random())));
+      if (!masih()) throw e;
+    }
+  }
+}
+
+// shortcut: pencarian otomatis di 14 angka (semua NIM angkatan ini); ubah jika panjang NIM berubah.
+const PANJANG_NIM = 14;
+let pemilik = null;   // { nim, kelas, nama } yang sudah dikonfirmasi server
+let mencari = '';     // NIM yang sedang diperiksa
+let fotoBase64 = '';
+let tekan = null;     // { nim, foto, waktu } saat Kirim pertama ditekan, sampai server menjawab
+
+function tampilSesi(s) {
+  const el = $('sesi');
+  if (s.buka) {
+    el.className = 'sesi ' + (s.status === 'TERLAMBAT' ? 'telat' : 'buka');
+    el.textContent = `Sesi ${s.sesi === 'PAGI' ? 'Pagi' : 'Sore'} dibuka` +
+      (s.status === 'TERLAMBAT' ? ' (lewat batas, tercatat terlambat)' : '');
+  } else {
+    el.className = 'sesi tutup';
+    el.textContent = s.pesan;
+  }
+}
+
+function tampilPesan(teks, jenis = 'galat') {
+  if (!$('pesan').hidden && $('pesan').textContent === teks) return; // jangan diumumkan ulang di tiap percobaan
+  $('pesan').textContent = teks;
+  $('pesan').className = 'pesan ' + jenis;
+  $('pesan').hidden = !teks;
+}
+
+function tampilPemilik(ket, nama) {
+  if ($('p-nama').textContent === (nama || '') && $('p-ket').textContent === ket) return;
+  $('p-nama').textContent = nama || '';
+  $('p-ket').textContent = ket;
+}
+
+async function periksaNim() {
+  const nim = $('nim').value;
+  if (nim.length !== PANJANG_NIM) return tampilPemilik(nim ? `NIM harus ${PANJANG_NIM} angka.` : 'Nama dan kelas akan muncul di sini.');
+  if (pemilik || mencari === nim) return;
+  mencari = nim;
+  tampilPemilik('Memeriksa NIM…');
+  try {
+    const masih = () => $('nim').value === nim;
+    const m = await panggilUlang('cariMahasiswa', [nim],
+      () => { if (masih()) tampilPemilik('Server sedang ramai. Masih memeriksa NIM…'); }, masih);
+    if ($('nim').value !== nim) return; // jawaban untuk ketikan lama
+    tampilPesan('');
+    if (!m) return tampilPemilik('NIM tidak ditemukan. Periksa lagi, atau hubungi pengelola kelas.');
+    pemilik = { nim, kelas: m.kelas, nama: m.nama };
+    tampilPemilik(`Kelas ${m.kelas}. Pastikan ini nama Anda.`, m.nama);
+  } catch (e) {
+    if ($('nim').value === nim) tampilPemilik('NIM gagal diperiksa. Periksa sinyal lalu tekan Kirim untuk mencoba lagi.');
+  } finally {
+    if (mencari === nim) mencari = '';
+  }
+}
+
+$('nim').addEventListener('input', () => {
+  const el = $('nim');
+  const angka = el.value.replace(/[^0-9]/g, '');
+  if (angka !== el.value) el.value = angka;
+  if (pemilik && pemilik.nim === angka) return;
+  pemilik = null;
+  tampilPesan('');
+  periksaNim();
+});
+
+// Kecilkan foto ke sisi terpanjang 1080 px, JPEG kualitas 0,7 (±100–200 KB; watermark tetap terbaca).
+async function kompres(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise((ok, gagal) => { img.onload = ok; img.onerror = gagal; img.src = url; });
+    const s = Math.min(1, 1080 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * s);
+    c.height = Math.round(img.naturalHeight * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.7);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+let pilihanFoto = 0; // nomor pilihan terakhir: kompresi bisa selesai tidak berurutan
+$('foto').addEventListener('change', async () => {
+  const pilihan = ++pilihanFoto;
+  fotoBase64 = '';
+  $('pratinjau').hidden = true;
+  tampilPesan('');
+  const file = $('foto').files[0];
+  if (!file) return;
+  try {
+    const dataUrl = await kompres(file);
+    if (pilihan !== pilihanFoto) return;
+    fotoBase64 = dataUrl.split(',')[1];
+    $('pratinjau').src = dataUrl;
+    $('pratinjau').hidden = false;
+  } catch (e) {
+    if (pilihan === pilihanFoto) tampilPesan('Foto tidak bisa dibuka. Pilih foto JPEG dari Timemark.');
+  }
+});
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!pemilik || pemilik.nim !== $('nim').value) {
+    pemilik = null;
+    periksaNim(); // tidak langsung mengirim: nama harus terlihat dulu
+    $('nim').focus();
+    return tampilPesan('Masukkan NIM sampai nama Anda muncul, lalu tekan Kirim.');
+  }
+  if (!fotoBase64) return tampilPesan('Pilih foto Timemark terlebih dahulu.');
+  tampilPesan('');
+  // Menekan Kirim lagi setelah gagal tidak mengulang hitungan, selama NIM dan fotonya sama.
+  if (!tekan || tekan.nim !== pemilik.nim || tekan.foto !== fotoBase64) tekan = { nim: pemilik.nim, foto: fotoBase64, waktu: Date.now() };
+  const kiriman = () => [{ nim: tekan.nim, foto: tekan.foto, tunda: Date.now() - tekan.waktu }];
+  for (const id of ['nim', 'foto', 'kirim']) $(id).disabled = true;
+  $('kirim').textContent = 'Mengirim…';
+  try {
+    const r = await panggilUlang('kirimPresensi', kiriman, () => {
+      $('kirim').textContent = 'Mencoba lagi…';
+      tampilPesan('Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman. Waktu Anda menekan Kirim tetap dihitung, sampai 5 menit.', 'tunggu');
+    });
+    tekan = null;
+    tampilPesan('');
+    if (r.tolak) return tampilPesan(r.tolak);
+    $('t-nama').textContent = r.nama;
+    $('t-nim').textContent = r.nim;
+    $('t-sesi').textContent = r.sesi === 'PAGI' ? 'Pagi' : 'Sore';
+    $('t-status').textContent = r.status === 'HADIR' ? 'Hadir' : 'Terlambat';
+    $('t-jam').textContent = r.jam;
+    $('form').hidden = true;
+    $('terima').hidden = false;
+    $('terima').focus();
+  } catch (err) {
+    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Kirim lagi, dan simpan foto Timemark sebagai bukti waktu.');
+  } finally {
+    for (const id of ['nim', 'foto', 'kirim']) $(id).disabled = false;
+    $('kirim').textContent = 'Kirim presensi';
+  }
+});
+
+panggilUlang('ambilAwal', [], () => { $('sesi').textContent = 'Server sedang ramai. Masih memuat…'; }).then(d => {
+  tampilSesi(d.sesi);
+  $('form').hidden = false;
+}).catch(() => {
+  $('sesi').className = 'sesi tutup';
+  $('sesi').textContent = 'Halaman gagal dimuat karena server ramai atau sinyal lemah. Muat ulang halaman.';
+});
+</script>
+<!-- Sesudah skrip, agar server font yang lambat tidak menahan formulir. -->
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@500,600&amp;display=swap">
+</body>
+</html>
