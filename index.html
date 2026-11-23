@@ -15,7 +15,7 @@
 :root {
   color-scheme: only light; /* "only" menolak mode gelap paksa peramban ponsel */
   --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px;
-  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1.0625rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-4xl: 2.488rem;
+  --text-xs: 0.875rem; --text-sm: 1rem; --text-md: 1.0625rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-4xl: 2.488rem;
   --dur-micro: 120ms;
   --container: 64rem; --control: 52px; --control-primary: 54px;
 
@@ -83,10 +83,20 @@ h1 {
 .sesi.buka { --sheet: var(--color-mint); color: var(--color-on-fill); }
 .sesi.telat { --sheet: var(--color-sand); color: var(--color-on-fill); }
 .sesi.tutup { --sheet: var(--color-accent-3); color: var(--color-on-fill); }
-/* Kerangka formulir selama data awal dimuat */
-main:has(.sesi:not(.buka, .telat, .tutup)) .lembar::before {
-  content: ""; display: block; min-height: 30rem; border-radius: var(--radius-card); background: var(--color-paper-2);
+/* Kerangka seberbentuk formulir selama data awal dimuat */
+.kerangka {
+  display: grid; gap: var(--space-xs); padding: var(--space-lg) var(--space-md);
+  border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card);
 }
+.kerangka span {
+  display: block; height: var(--control); border-radius: var(--radius-input);
+  background: linear-gradient(90deg, var(--color-paper-2) 30%, var(--color-paper-3) 50%, var(--color-paper-2) 70%) 0 0 / 300% 100%;
+  animation: kilau 1.4s ease-in-out infinite;
+}
+.kerangka .label { width: 30%; height: 1rem; margin-top: var(--space-sm); }
+.kerangka .kotak { height: 4.5rem; }
+.kerangka .tombol { height: var(--control-primary); margin-top: var(--space-md); border-radius: var(--radius-stock); }
+@keyframes kilau { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 form {
   display: grid; gap: var(--space-md); padding: var(--space-lg) var(--space-md);
@@ -105,12 +115,33 @@ textarea { height: auto; min-height: 5.5rem; padding-block: var(--space-sm); res
 input[type="date"] { padding-inline: var(--space-sm); }
 
 /* Pilihan Presensi atau Izin */
-.mode { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs); border-radius: var(--radius-input); background: var(--color-paper-2); }
-.mode button {
-  min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;
-  color: var(--color-muted); font-weight: 600; cursor: pointer; touch-action: manipulation;
+/* Pola sama dengan tab panel admin: jempol karet digerakkan karet() di skrip kedua. */
+.mode {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
+  border-radius: var(--radius-input); background: var(--color-paper-2);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
 }
-.mode button[aria-pressed="true"] { background: var(--color-card); color: var(--color-ink); box-shadow: var(--shadow-card); }
+.mode button {
+  position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;
+  color: var(--color-muted); font-weight: 600; cursor: pointer; touch-action: manipulation; transition: scale var(--dur-micro) var(--ease-snap);
+}
+.mode button[aria-pressed="true"] { color: var(--color-ink); }
+.mode button[aria-pressed="false"]:active { scale: 0.96; }
+.mode[data-seret] button[aria-pressed="true"] { cursor: grab; }
+.mode[data-pegang], .mode[data-pegang] button { cursor: grabbing; }
+.mode[data-jempol]::before {
+  content: ""; position: absolute; left: var(--l); top: var(--t); width: calc(var(--r) - var(--l)); height: calc(var(--b) - var(--t));
+  border-radius: calc(var(--radius-input) - 4px); background: var(--color-card); box-shadow: var(--shadow-card);
+}
+/* Huruf yang tertutup jempol berwarna tinta, juga saat jempol baru separuh jalan. */
+.mode[data-jempol] button {
+  --redup: var(--color-muted);
+  background:
+    linear-gradient(90deg, transparent calc(var(--l) - var(--x)), var(--color-ink) 0 calc(var(--r) - var(--x)), transparent 0)
+      0 calc(var(--t) - var(--y)) / 100% calc(var(--b) - var(--t)) no-repeat,
+    var(--redup);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
 .mode button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .panel { display: grid; gap: var(--space-md); min-width: 0; }
 .dua { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
@@ -139,7 +170,20 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
 
 .pesan { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-input); text-wrap: pretty; }
 .pesan.tunggu { background: var(--color-paper-2); color: var(--color-ink); }
-.pesan.galat { background: var(--color-error-paper); color: var(--color-error); }
+.pesan.galat { display: flex; gap: var(--space-xs); align-items: baseline; background: var(--color-error-paper); color: var(--color-error); }
+/* Galat tepat di bawah isiannya; tanda seru supaya maknanya tidak hanya dari warna. */
+.galat-isian { display: flex; gap: var(--space-xs); align-items: baseline; margin: var(--space-2xs) 0 0; color: var(--color-error); font-weight: 600; text-wrap: pretty; }
+.galat-isian::before, .pesan.galat::before {
+  content: "!"; flex: none; display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%;
+  background: var(--color-error); color: var(--color-paper); font-size: 0.875em; font-weight: 700; line-height: 1;
+}
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--color-error); box-shadow: inset 0 0 0 1px var(--color-error); }
+.opsional { color: var(--color-muted); font-weight: 500; }
+
+.info { display: grid; gap: var(--space-xs); margin-top: var(--space-xl); padding-inline: var(--space-md); color: var(--color-muted); }
+.info h2 { margin: var(--space-sm) 0 0; color: var(--color-ink); font-size: var(--text-md); font-weight: 600; line-height: 1.3; }
+.info h2:first-child { margin-top: 0; }
+.info p { margin: 0; max-width: 60ch; }
 
 .btn--primary {
   --edge: 5px;
@@ -150,6 +194,11 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
   transition: translate var(--dur-micro) var(--ease-spring), box-shadow var(--dur-micro) var(--ease-snap);
 }
 .btn--primary:active { --edge: 1px; translate: 0 4px; }
+.btn--primary[aria-busy="true"]::before {
+  content: ""; display: inline-block; width: 1em; height: 1em; margin-right: var(--space-xs); vertical-align: -0.15em;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: putar 0.7s linear infinite;
+}
+@keyframes putar { to { rotate: 1turn; } }
 .btn--primary:disabled, .btn--primary:disabled:active {
   --edge: 1px; translate: 0 4px; cursor: not-allowed;
   background: var(--color-paper-3); color: var(--color-muted); box-shadow: 0 var(--edge) 0 0 var(--color-edge);
@@ -164,7 +213,7 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
 
 @media (hover: hover) {
   input:not(:disabled):hover, select:not(:disabled):hover, textarea:not(:disabled):hover { background: var(--color-paper-2); }
-  .mode button[aria-pressed="false"]:hover { color: var(--color-ink); }
+  .mode button[aria-pressed="false"]:hover { --redup: var(--color-ink); }
   .btn--primary:not(:disabled, :active):hover { --edge: 7px; translate: 0 -2px; }
 }
 @media (max-width: 22rem) {
@@ -176,7 +225,20 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
   .identitas { gap: var(--space-lg); }
   form, .terima { padding-inline: var(--space-lg); }
 }
+/* Yang baru muncul masuk dengan pudar dan turun singkat supaya tidak terasa patah; saat hilang langsung lenyap. */
+#form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info {
+  transition: opacity 200ms var(--ease-snap), translate 200ms var(--ease-snap);
+}
+@starting-style {
+  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info {
+    opacity: 0; translate: 0 -6px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info,
+  .mode button { transition: none; }
+  .kerangka span, .btn--primary[aria-busy="true"]::before { animation: none; }
+  .mode button[aria-pressed="false"]:active { scale: none; }
   .btn--primary { transition: none; }
   .btn--primary:active, .btn--primary:disabled, .btn--primary:not(:disabled, :active):hover { translate: none; }
 }
@@ -190,6 +252,12 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
   </div>
 
   <div class="lembar">
+  <div id="kerangka" class="kerangka" aria-hidden="true">
+    <span></span>
+    <span class="label"></span><span></span><span class="kotak"></span>
+    <span class="label"></span><span></span>
+    <span class="tombol"></span>
+  </div>
   <form id="form" novalidate hidden>
     <div class="mode" role="group" aria-label="Jenis kiriman">
       <button type="button" id="mode-presensi" aria-pressed="true">Presensi</button>
@@ -198,18 +266,20 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
 
     <div class="bidang">
       <label for="nim">NIM</label>
-      <input id="nim" name="nim" type="text" inputmode="numeric" placeholder="14 angka" aria-describedby="pemilik">
+      <input id="nim" name="nim" type="text" inputmode="numeric" autocomplete="on" placeholder="14 angka" aria-describedby="pemilik galat-nim">
       <div id="pemilik" class="pemilik" aria-live="polite" aria-atomic="true">
         <strong id="p-nama"></strong>
         <span id="p-ket">Nama dan kelas akan muncul di sini.</span>
       </div>
+      <p class="galat-isian" id="galat-nim" hidden></p>
     </div>
 
     <div id="panel-presensi" class="panel">
       <div class="bidang">
         <label for="foto">Foto Timemark</label>
-        <input id="foto" type="file" accept="image/jpeg,image/png" aria-describedby="bantu-foto">
+        <input id="foto" type="file" accept="image/jpeg,image/png" aria-describedby="bantu-foto galat-foto">
         <div class="bantu" id="bantu-foto">Foto wajah dan kartu identitas, rasio 1:1, dari aplikasi Timemark.</div>
+        <p class="galat-isian" id="galat-foto" hidden></p>
         <img id="pratinjau" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" alt="Pratinjau foto yang dipilih" hidden>
       </div>
     </div>
@@ -218,13 +288,14 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
       <div class="bidang">
         <label for="jenis">Jenis izin</label>
         <!-- Nilai harus sama dengan JENIS_IZIN dan CAKUPAN_IZIN di Code.gs -->
-        <select id="jenis">
+        <select id="jenis" aria-describedby="galat-jenis">
           <option value="">Pilih jenis</option>
           <option>Sakit</option>
           <option>Keperluan keluarga</option>
           <option>Kegiatan kampus</option>
           <option>Lainnya</option>
         </select>
+        <p class="galat-isian" id="galat-jenis" hidden></p>
       </div>
       <div class="bidang">
         <label for="cakupan">Berlaku untuk</label>
@@ -237,22 +308,26 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
       <div class="dua">
         <div class="bidang">
           <label for="mulai" id="label-mulai">Dari tanggal</label>
-          <input id="mulai" type="date">
+          <input id="mulai" type="date" aria-describedby="galat-mulai">
+          <p class="galat-isian" id="galat-mulai" hidden></p>
         </div>
         <div class="bidang" id="bidang-selesai">
-          <label for="selesai">Sampai tanggal</label>
-          <input id="selesai" type="date" aria-describedby="bantu-selesai">
+          <label for="selesai">Sampai tanggal <span class="opsional">(opsional)</span></label>
+          <input id="selesai" type="date" aria-describedby="bantu-selesai galat-selesai">
+          <p class="galat-isian" id="galat-selesai" hidden></p>
         </div>
       </div>
       <div class="bantu" id="bantu-selesai">Kosongkan "Sampai tanggal" untuk izin satu hari.</div>
       <div class="bidang">
         <label for="alasan">Alasan</label>
-        <textarea id="alasan" maxlength="300" rows="3" placeholder="Contoh: demam sejak semalam, berobat ke klinik."></textarea>
+        <textarea id="alasan" maxlength="300" rows="3" placeholder="Contoh: demam sejak semalam, berobat ke klinik." aria-describedby="galat-alasan"></textarea>
+        <p class="galat-isian" id="galat-alasan" hidden></p>
       </div>
       <div class="bidang">
         <label for="bukti">Foto bukti, 1 sampai 3</label>
-        <input id="bukti" type="file" accept="image/jpeg,image/png" multiple aria-describedby="bantu-bukti">
+        <input id="bukti" type="file" accept="image/jpeg,image/png" multiple aria-describedby="bantu-bukti galat-bukti">
         <div class="bantu" id="bantu-bukti">Surat dokter, undangan, atau bukti lain. Pilih semua fotonya sekaligus.</div>
+        <p class="galat-isian" id="galat-bukti" hidden></p>
         <div id="pratinjau-bukti" class="pratinjau-bukti"></div>
       </div>
     </div>
@@ -264,6 +339,13 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
   <section id="terima" class="terima" hidden tabindex="-1">
     <strong id="t-judul">Presensi tercatat.</strong>
     <dl id="t-isi"></dl>
+  </section>
+
+  <section class="info" aria-label="Privasi dan bantuan">
+    <h2>Siapa yang melihat foto Anda</h2>
+    <p>Foto Timemark dan foto bukti izin disimpan di Google Drive pengelola presensi. Yang bisa membukanya hanya admin kelas Anda dan pengelola angkatan, untuk memeriksa kehadiran. Foto tidak dihapus otomatis.</p>
+    <h2>Ada kendala?</h2>
+    <p>Jika NIM tidak ditemukan atau presensi tidak terkirim, hubungi pengelola kelas Anda dan tunjukkan foto Timemark sebagai bukti waktu.</p>
   </section>
   </div>
 </main>
@@ -316,7 +398,21 @@ let mode = 'presensi';
 let buktiBase64 = []; // 1–3 foto bukti izin yang sudah dikompres
 const MAKS_BUKTI = 3; // sama dengan Code.gs
 
-function teksKirim() { return mode === 'izin' ? 'Kirim izin' : 'Kirim presensi'; }
+function teksKirim() { return mode === 'izin' ? 'Ajukan izin' : 'Kirim presensi'; }
+
+// Galat tampil di bawah isiannya sendiri. Mengembalikan teks supaya bisa dipakai sebagai penyaring.
+function galatIsian(id, teks) {
+  const g = $('galat-' + id);
+  g.textContent = teks || '';
+  g.hidden = !teks;
+  $(id).ariaInvalid = teks ? 'true' : null;
+  return teks;
+}
+// Mengubah isian menghapus galatnya; data yang sudah diisi tidak pernah dikosongkan.
+$('form').addEventListener('input', e => {
+  const g = document.getElementById('galat-' + e.target.id);
+  if (g && !g.hidden) galatIsian(e.target.id, '');
+});
 
 function pilihMode(m) {
   mode = m;
@@ -434,7 +530,7 @@ $('foto').addEventListener('change', async () => {
   const pilihan = ++pilihanFoto;
   fotoBase64 = '';
   $('pratinjau').hidden = true;
-  tampilPesan('');
+  galatIsian('foto', '');
   const file = $('foto').files[0];
   if (!file) return;
   try {
@@ -444,7 +540,7 @@ $('foto').addEventListener('change', async () => {
     $('pratinjau').src = dataUrl;
     $('pratinjau').hidden = false;
   } catch (e) {
-    if (pilihan === pilihanFoto) tampilPesan('Foto tidak bisa dibuka. Pilih foto JPEG dari Timemark.');
+    if (pilihan === pilihanFoto) galatIsian('foto', 'Foto tidak bisa dibuka. Pilih foto JPEG dari Timemark.');
   }
 });
 
@@ -453,12 +549,12 @@ $('bukti').addEventListener('change', async () => {
   const pilihan = ++pilihanBukti;
   buktiBase64 = [];
   $('pratinjau-bukti').replaceChildren();
-  tampilPesan('');
+  galatIsian('bukti', '');
   const files = [...$('bukti').files];
   if (!files.length) return;
   if (files.length > MAKS_BUKTI) {
     $('bukti').value = '';
-    return tampilPesan(`Paling banyak ${MAKS_BUKTI} foto bukti. Pilih ulang.`);
+    return galatIsian('bukti', `Paling banyak ${MAKS_BUKTI} foto bukti. Pilih ulang, maksimal ${MAKS_BUKTI} foto sekaligus.`);
   }
   try {
     const hasil = await Promise.all(files.map(kompres));
@@ -471,7 +567,7 @@ $('bukti').addEventListener('change', async () => {
       return img;
     }));
   } catch (e) {
-    if (pilihan === pilihanBukti) tampilPesan('Foto bukti tidak bisa dibuka. Pilih foto JPEG atau PNG.');
+    if (pilihan === pilihanBukti) galatIsian('bukti', 'Foto bukti tidak bisa dibuka. Pilih foto JPEG atau PNG.');
   }
 });
 
@@ -481,7 +577,10 @@ const pesanUlang = teks => () => {
 };
 
 async function kirimPresensi() {
-  if (!fotoBase64) return tampilPesan('Pilih foto Timemark terlebih dahulu.');
+  if (!fotoBase64) {
+    galatIsian('foto', 'Pilih foto Timemark terlebih dahulu.');
+    return 'foto'; // difokuskan sesudah isian aktif lagi
+  }
   // Menekan Kirim lagi setelah gagal tidak mengulang hitungan, selama NIM dan fotonya sama.
   if (!tekan || tekan.nim !== pemilik.nim || tekan.foto !== fotoBase64) tekan = { nim: pemilik.nim, foto: fotoBase64, waktu: Date.now() };
   const kiriman = () => [{ nim: tekan.nim, foto: tekan.foto, tunda: Date.now() - tekan.waktu }];
@@ -502,11 +601,15 @@ async function kirimIzin() {
   const sehari = $('cakupan').value === 'SEHARI';
   const data = { nim: pemilik.nim, jenis: $('jenis').value, cakupan: $('cakupan').value, mulai: $('mulai').value,
     selesai: sehari ? $('selesai').value || $('mulai').value : $('mulai').value, alasan: $('alasan').value.trim(), bukti: buktiBase64 };
-  if (!data.jenis) return tampilPesan('Pilih jenis izin.');
-  if (!data.mulai) return tampilPesan('Isi tanggal izin.');
-  if (data.selesai < data.mulai) return tampilPesan('"Sampai tanggal" tidak boleh sebelum "Dari tanggal".');
-  if (!data.alasan) return tampilPesan('Tulis alasan izin.');
-  if (!data.bukti.length) return tampilPesan('Pilih 1 sampai 3 foto bukti.');
+  // Semua galat ditampilkan sekaligus; id isian pertama yang salah dikembalikan untuk difokuskan.
+  const salah = [
+    ['jenis', !data.jenis && 'Pilih jenis izin.'],
+    ['mulai', !data.mulai && 'Isi tanggal izin.'],
+    ['selesai', data.selesai < data.mulai && '"Sampai tanggal" tidak boleh sebelum "Dari tanggal".'],
+    ['alasan', !data.alasan && 'Tulis alasan izin, misalnya "demam, berobat ke klinik".'],
+    ['bukti', !data.bukti.length && 'Pilih 1 sampai 3 foto bukti.'],
+  ].filter(([id, teks]) => galatIsian(id, teks || ''));
+  if (salah.length) return salah[0][0];
   try {
     // Data yang sama di tiap percobaan: jika yang pertama ternyata tercatat, server mengembalikan tanda terimanya.
     const r = await panggilUlang('ajukanIzin', [data], pesanUlang('Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman.'));
@@ -515,7 +618,7 @@ async function kirimIzin() {
     tampilTerima('Izin tercatat.', [['Nama', r.nama], ['NIM', r.nim], ['Jenis', r.jenis], ['Berlaku', r.cakupan],
       ['Tanggal', r.mulai === r.selesai ? r.mulai : `${r.mulai} s.d. ${r.selesai}`], ['Nomor', r.id]]);
   } catch (err) {
-    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Kirim izin lagi.');
+    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Ajukan izin lagi.');
   }
 }
 
@@ -526,26 +629,178 @@ $('form').addEventListener('submit', async e => {
     pemilik = null;
     periksaNim(); // tidak langsung mengirim: nama harus terlihat dulu
     $('nim').focus();
-    return tampilPesan('Masukkan NIM sampai nama Anda muncul, lalu tekan Kirim.');
+    return galatIsian('nim', 'Masukkan NIM sampai nama Anda muncul, lalu tekan Kirim.');
   }
   tampilPesan('');
   for (const id of ISIAN) $(id).disabled = true;
   $('kirim').textContent = 'Mengirim…';
+  $('kirim').ariaBusy = 'true';
+  let salah = ''; // id isian yang galat; isian nonaktif tidak bisa difokuskan, jadi tunggu sampai aktif lagi
   try {
-    await (mode === 'izin' ? kirimIzin() : kirimPresensi());
+    salah = await (mode === 'izin' ? kirimIzin() : kirimPresensi());
   } finally {
     for (const id of ISIAN) $(id).disabled = false;
     $('kirim').textContent = teksKirim();
+    $('kirim').ariaBusy = null;
+    if (salah) $(salah).focus();
   }
 });
 
 panggilUlang('ambilAwal', [], () => { $('sesi').textContent = 'Server sedang ramai. Masih memuat…'; }).then(d => {
   tampilSesi(d.sesi);
+  $('kerangka').hidden = true;
   $('form').hidden = false;
 }).catch(() => {
+  $('kerangka').hidden = true;
   $('sesi').className = 'sesi tutup';
   $('sesi').textContent = 'Halaman gagal dimuat karena server ramai atau sinyal lemah. Muat ulang halaman.';
 });
+</script>
+<script>
+// Skrip terpisah: tes menjalankan skrip pertama tanpa DOM, sedangkan bagian ini butuh ResizeObserver dan matchMedia.
+// Salinan karet() dari admin.html; ubah keduanya bersamaan.
+// Jempol karet untuk .pilihan, port lengkap RubberSegment (React Bits). Saat pindah, jempol meregang menutup
+// kedua tab lalu mendarat dengan pegas; tepi belakang memampat 3px dan kembali. Jempol bisa diseret (ditahan
+// karet di ujung) dan dilempar. Tab tetap dipilih lewat klik tombolnya, jadi handler yang ada tidak berubah.
+const geraknyaDikurangi = matchMedia('(prefers-reduced-motion: reduce)');
+const lunak = p => 1 - (1 - Math.min(1, p)) ** 4;
+// Pegas seperti di Motion: durasi visual (detik) dan pantulan 0..1 menjadi kekakuan dan redaman, massa 1.
+const pegas = (durasi, pantul = 0) => { const k = (2 * Math.PI / (durasi * 1.2)) ** 2; return { k, c: 2 * (1 - pantul) * Math.sqrt(k) }; };
+const PEGAS_UI = pegas(0.3), PEGAS_LEMPAR = pegas(0.4, 0.2), PEGAS_LEPAS = pegas(0.16);
+const batas = (n, a, b) => Math.min(b, Math.max(a, n));
+const tahanKaret = (lewat, w) => (lewat * w * 0.55) / (w + 0.55 * Math.abs(lewat));
+const proyeksi = v => { const d = 1 - 0.1 * 0.05 ** 0.75; return (v / 1000) * d / (1 - d); }; // glide 75
+const kecepatan = (riwayat, kini) => {
+  const r = riwayat.filter(([t]) => kini - t <= 100);
+  if (r.length < 2) return 0;
+  const [[t0, x0], [t1, x1]] = [r[0], r[r.length - 1]];
+  return t1 - t0 >= 8 ? (x1 - x0) / (t1 - t0) * 1000 : 0;
+};
+const sama = (a, b) => !!a && !!b && a.every((n, i) => n === b[i]);
+
+function karet(g) {
+  const x = [0, 0, 0, 0], v = [0, 0, 0, 0], motor = [null, null, null, null]; // tepi kiri, atas, kanan, bawah
+  let slot = [], sasaran = null, bingkai = 0, lalu = 0, serah = 0, seret = null;
+  const tombol = () => [...g.querySelectorAll('button')];
+  const tulis = () => ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, x[i] + 'px'));
+  const jalan = now => {
+    const dt = Math.min(0.05, (now - lalu) / 1000);
+    lalu = now;
+    motor.forEach((m, i) => {
+      if (!m) return;
+      if (m.lama) { // tween regang
+        const awal = x[i], p = (now - m.mulai) / m.lama;
+        x[i] = m.dari + (m.ke - m.dari) * lunak(p);
+        v[i] = dt ? (x[i] - awal) / dt : 0;
+        if (p >= 1) motor[i] = null;
+        return;
+      }
+      for (let sisa = dt; sisa > 0; sisa -= 0.004) { // langkah kecil agar pegas kaku tetap stabil
+        const h = Math.min(0.004, sisa);
+        v[i] += (-m.k * (x[i] - m.ke) - m.c * v[i]) * h;
+        x[i] += v[i] * h;
+      }
+      if (Math.abs(x[i] - m.ke) < 0.1 && Math.abs(v[i]) < 5) { x[i] = m.ke; v[i] = 0; motor[i] = null; if (m.lalu) m.lalu(); }
+    });
+    tulis();
+    bingkai = motor.some(Boolean) ? requestAnimationFrame(jalan) : 0;
+  };
+  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = performance.now(); bingkai = requestAnimationFrame(jalan); } };
+  const henti = () => { clearTimeout(serah); motor.fill(null); v.fill(0); };
+  const lompat = tuju => { henti(); sasaran = tuju; x.splice(0, 4, ...tuju); tulis(); };
+  // Tepi depan melesat ke tujuan; tepi belakang menyusul, memampat bila diminta, lalu kembali.
+  const darat = (tuju, kec, lempar, pampat) => {
+    clearTimeout(serah);
+    sasaran = tuju;
+    for (const [a, b] of [[0, 2], [1, 3]]) {
+      const geser = tuju[a] + tuju[b] - x[a] - x[b], d = Math.sign(geser) || 1;
+      const [depan, belakang] = d > 0 ? [b, a] : [a, b];
+      if (kec !== null && a === 0) v[a] = v[b] = batas(kec, -2000, 2000);
+      gerak(depan, { ...(lempar ? PEGAS_LEMPAR : PEGAS_UI), ke: tuju[depan] });
+      const p = pampat && Math.abs(geser) > 1 ? d * 3 : 0;
+      gerak(belakang, { ...PEGAS_UI, ke: tuju[belakang] + p, lalu: p ? () => gerak(belakang, { ...PEGAS_LEPAS, ke: tuju[belakang] }) : null });
+    }
+  };
+  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms kemudian.
+  const pindah = tuju => {
+    clearTimeout(serah);
+    sasaran = tuju;
+    const mulai = performance.now();
+    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai, lama: 190 }));
+    serah = setTimeout(() => darat(tuju, null, false, true), 150);
+  };
+  const segarkan = paksa => {
+    const semua = tombol();
+    slot = semua.map(b => {
+      b.style.setProperty('--x', b.offsetLeft + 'px');
+      b.style.setProperty('--y', b.offsetTop + 'px');
+      return [b.offsetLeft, b.offsetTop, b.offsetLeft + b.offsetWidth, b.offsetTop + b.offsetHeight];
+    });
+    const i = semua.findIndex(b => b.getAttribute('aria-pressed') === 'true');
+    const tuju = i >= 0 && semua[i].offsetWidth ? slot[i] : null;
+    const tadi = g.hasAttribute('data-jempol');
+    g.toggleAttribute('data-jempol', !!tuju);
+    // Seret hanya bila semua tab sebaris (di layar sempit, Halaman panel menjadi 2×2).
+    g.toggleAttribute('data-seret', !!tuju && slot.every(s => s[1] === slot[0][1]));
+    if (!tuju) return henti();
+    if (seret || (!paksa && sama(tuju, sasaran))) return;
+    if (paksa || !tadi || geraknyaDikurangi.matches) lompat(tuju); else pindah(tuju);
+  };
+
+  const posisi = e => e.clientX - g.getBoundingClientRect().left;
+  g.addEventListener('pointerdown', e => {
+    const px = posisi(e);
+    if (seret || e.button !== 0 || !g.hasAttribute('data-seret') || px < x[0] || px > x[2]) return;
+    henti();
+    seret = { id: e.pointerId, x0: px, hidup: false, riwayat: [[e.timeStamp, px]] };
+    try { g.setPointerCapture(e.pointerId); } catch {}
+  });
+  g.addEventListener('pointermove', e => {
+    const s = seret;
+    if (!s || e.pointerId !== s.id) return;
+    const px = posisi(e);
+    s.riwayat.push([e.timeStamp, px]);
+    if (s.riwayat.length > 8) s.riwayat.shift();
+    if (!s.hidup) {
+      if (Math.abs(px - s.x0) < 4) return;
+      Object.assign(s, { hidup: true, geser: px - x[0], w: x[2] - x[0] });
+      g.toggleAttribute('data-pegang', true);
+    }
+    const kiri = slot[0][0], kanan = slot[slot.length - 1][2], l = px - s.geser, maks = kanan - s.w;
+    if (l < kiri) { x[0] = kiri; x[2] = kiri + s.w - tahanKaret(kiri - l, s.w); }
+    else if (l > maks) { x[2] = kanan; x[0] = maks + tahanKaret(l - maks, s.w); }
+    else { x[0] = l; x[2] = l + s.w; }
+    tulis();
+  });
+  const lepas = e => {
+    const s = seret;
+    if (!s || e.pointerId !== s.id) return;
+    seret = null;
+    g.removeAttribute('data-pegang');
+    if (!s.hidup || e.type !== 'pointerup') return darat(sasaran, null, false, false);
+    const kec = kecepatan(s.riwayat, e.timeStamp), lempar = Math.abs(kec) > 110;
+    const asal = slot.findIndex(t => sama(t, sasaran)), tengah = (x[0] + x[2]) / 2 + proyeksi(kec);
+    const jarak = t => Math.abs((t[0] + t[2]) / 2 - tengah);
+    let ke = slot.reduce((terbaik, t, i) => jarak(t) < jarak(slot[terbaik]) ? i : terbaik, 0);
+    if (lempar && ke === asal) ke = batas(ke + Math.sign(kec), 0, slot.length - 1);
+    if (geraknyaDikurangi.matches) lompat(slot[ke]); else darat(slot[ke], kec, lempar, lempar);
+    // Handler klik yang memilih tab; segarkan() mengembalikan jempol bila pilihan ternyata tidak berubah.
+    if (ke !== asal) { tombol()[ke].click(); segarkan(); }
+  };
+  for (const jenis of ['pointerup', 'pointercancel', 'lostpointercapture']) g.addEventListener(jenis, lepas);
+  g.addEventListener('keydown', e => {
+    const semua = tombol(), i = semua.indexOf(document.activeElement);
+    const ke = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: semua.length - 1 }[e.key];
+    if (i < 0 || !semua[ke]) return;
+    e.preventDefault();
+    semua[ke].click();
+    tombol()[ke].focus(); // tombol Sesi dibuat ulang saat diklik
+  });
+
+  new MutationObserver(() => segarkan()).observe(g, { subtree: true, childList: true, attributeFilter: ['aria-pressed'] });
+  new ResizeObserver(() => segarkan(true)).observe(g);
+}
+karet(document.querySelector('.mode'));
 </script>
 <!-- Sesudah skrip, agar server font yang lambat tidak menahan formulir. -->
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@500,600&amp;display=swap">

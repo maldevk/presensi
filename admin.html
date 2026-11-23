@@ -10,7 +10,7 @@
 :root {
   color-scheme: only light;
   --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px;
-  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1.0625rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem;
+  --text-xs: 0.875rem; --text-sm: 1rem; --text-md: 1.0625rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem;
   --dur-micro: 120ms;
   --container: 56rem; --control: 48px;
 
@@ -61,16 +61,40 @@ input[type="date"] { padding-inline: var(--space-sm); }
 }
 .btn:active { translate: 0 3px; box-shadow: 0 1px 0 0 var(--color-accent-deep); }
 .btn:disabled { background: var(--color-paper-3); color: var(--color-muted); box-shadow: none; cursor: not-allowed; }
-.btn-tipis { min-height: 40px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-card); font-weight: 600; font-size: var(--text-sm); }
+.btn-tipis { min-height: 44px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-card); font-weight: 600; font-size: var(--text-sm); }
 
-.pesan { padding: var(--space-sm) var(--space-md); border-radius: var(--radius-input); background: var(--color-error-paper); color: var(--color-error); }
-.pesan.tenang { background: var(--color-paper-2); color: var(--color-ink); }
+.pesan { display: flex; gap: var(--space-xs); align-items: baseline; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-input); background: var(--color-error-paper); color: var(--color-error); }
+.pesan.tenang { display: block; background: var(--color-paper-2); color: var(--color-ink); }
+/* Galat tepat di bawah isiannya; tanda seru supaya maknanya tidak hanya dari warna. Sama dengan index.html. */
+.galat-isian { display: flex; gap: var(--space-xs); align-items: baseline; margin: var(--space-2xs) 0 0; color: var(--color-error); font-weight: 600; }
+.galat-isian::before, .pesan:not(.tenang)::before {
+  content: "!"; flex: none; display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; border-radius: 50%;
+  background: var(--color-error); color: var(--color-paper); font-size: 0.875em; font-weight: 700; line-height: 1;
+}
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--color-error); box-shadow: inset 0 0 0 1px var(--color-error); }
+.sandi { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); }
+.sandi .btn-tipis { min-height: var(--control); border-radius: var(--radius-input); }
+
+/* Kerangka selama daftar dimuat */
+.kerangka span {
+  display: block; height: 1rem; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-paper-2) 30%, var(--color-paper-3) 50%, var(--color-paper-2) 70%) 0 0 / 300% 100%;
+  animation: kilau 1.4s ease-in-out infinite;
+}
+.baris.kerangka .isi span:first-child { width: 55%; height: 1.2rem; }
+.baris.kerangka .isi span:last-child { width: 80%; }
+.baris.kerangka > span { width: 4rem; height: 4rem; border-radius: var(--radius-input); }
+.kartu.kerangka { display: grid; gap: var(--space-sm); }
+.kartu.kerangka span:first-child { width: 35%; height: 1.4rem; }
+.kartu.kerangka span:not(:first-child) { height: var(--control); border-radius: var(--radius-input); }
+@keyframes kilau { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 /* Masuk */
 #layar-masuk { max-width: 26rem; width: 100%; margin-inline: auto; display: grid; gap: var(--space-md); }
 #layar-masuk form { display: grid; gap: var(--space-md); }
 
-/* Kepala panel */
+/* Kepala panel; bagian panel diberi jarak tetap supaya kelompok saringan, tab, dan daftar terbaca terpisah */
+#layar-panel, #bagian-harian { display: grid; gap: var(--space-md); align-content: start; }
 .kepala { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .akun { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-muted); font-size: var(--text-sm); }
 .akun strong { color: var(--color-ink); }
@@ -163,7 +187,7 @@ dialog p { margin: var(--space-sm) 0; }
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--color-ink); color: var(--color-paper);
 }
-.toast button { min-height: 36px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
+.toast button { min-height: 44px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
 
 @media (hover: hover) {
   .aksi button:not(:disabled):hover, .btn-tipis:hover { background: var(--color-paper-2); color: var(--color-ink); }
@@ -180,7 +204,26 @@ dialog p { margin: var(--space-sm) 0; }
   .libur .lebar { grid-column: auto; }
   #pilih-layar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* Yang baru muncul masuk dengan pudar dan turun singkat supaya tidak terasa patah; saat hilang langsung lenyap. */
+#layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
+.pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open] {
+  transition: opacity 200ms var(--ease-snap), translate 200ms var(--ease-snap);
+}
+@starting-style {
+  #layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
+  .pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open] { opacity: 0; translate: 0 -6px; }
+}
+/* Baris daftar masuk berurutan, hanya saat isi daftar berganti (tab, sesi, tanggal, kelas), bukan saat mengetik pencarian. */
+[data-masuk] > * { transition-delay: calc(var(--i, 0) * 30ms); }
+.toast { transition: opacity 200ms var(--ease-snap), translate 200ms var(--ease-snap); }
+@starting-style { .toast { opacity: 0; translate: 0 8px; } }
+dialog[open]::backdrop { transition: opacity 200ms ease; }
+@starting-style { dialog[open]::backdrop { opacity: 0; } }
+
 @media (prefers-reduced-motion: reduce) {
+  #layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
+  .pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open], dialog[open]::backdrop, .toast { transition: none; }
+  .kerangka span { animation: none; }
   .btn, .pilihan button { transition: none; }
   .btn:active { translate: none; }
   .pilihan button[aria-pressed="false"]:active { scale: none; }
@@ -194,14 +237,19 @@ dialog p { margin: var(--space-sm) 0; }
     <form id="form-masuk" class="kartu" novalidate>
       <div>
         <label for="akun">Akun</label>
-        <select id="akun" required><option value="">Memuat akun…</option></select>
+        <select id="akun" required aria-describedby="galat-akun"><option value="">Memuat akun…</option></select>
+        <p class="galat-isian" id="galat-akun" hidden></p>
       </div>
       <div>
         <label for="sandi">Kata sandi</label>
-        <input id="sandi" type="password" autocomplete="current-password" required>
+        <div class="sandi">
+          <input id="sandi" type="password" autocomplete="current-password" required aria-describedby="galat-sandi">
+          <button type="button" class="btn-tipis" data-lihat="sandi">Tampilkan</button>
+        </div>
+        <p class="galat-isian" id="galat-sandi" hidden></p>
       </div>
       <div id="pesan-masuk" class="pesan" role="alert" hidden></div>
-      <button id="tombol-masuk" class="btn" type="submit">Masuk</button>
+      <button id="tombol-masuk" class="btn" type="submit">Masuk ke panel</button>
     </form>
   </section>
 
@@ -304,7 +352,7 @@ dialog p { margin: var(--space-sm) 0; }
     <div id="pesan-dialog-mhs" class="pesan" role="alert" hidden></div>
     <div class="tombol-dialog">
       <button type="button" class="btn-tipis" data-tutup>Batal</button>
-      <button id="simpan-mhs" class="btn" type="submit">Simpan</button>
+      <button id="simpan-mhs" class="btn" type="submit">Simpan mahasiswa</button>
     </div>
   </form>
 </dialog>
@@ -315,11 +363,13 @@ dialog p { margin: var(--space-sm) 0; }
     <div><label for="akun-isi-nama">Nama akun</label><input id="akun-isi-nama" autocomplete="off" maxlength="30" placeholder="Misalnya KELAS A"></div>
     <div><label for="akun-isi-akses">Akses</label><input id="akun-isi-akses" list="pilihan-akses" autocomplete="off" maxlength="10"></div>
     <p class="catatan-kecil">UTAMA: semua kelas, Pengaturan, Mahasiswa, dan Akun. SEMUA: semua kelas. Nama kelas: hanya kelas itu.</p>
-    <div><label for="akun-isi-sandi" id="label-sandi">Kata sandi</label><input id="akun-isi-sandi" type="password" autocomplete="new-password"></div>
+    <div><label for="akun-isi-sandi" id="label-sandi">Kata sandi</label>
+      <div class="sandi"><input id="akun-isi-sandi" type="password" autocomplete="new-password">
+        <button type="button" class="btn-tipis" data-lihat="akun-isi-sandi">Tampilkan</button></div></div>
     <div id="pesan-dialog-akun" class="pesan" role="alert" hidden></div>
     <div class="tombol-dialog">
       <button type="button" class="btn-tipis" data-tutup>Batal</button>
-      <button id="simpan-akun" class="btn" type="submit">Simpan</button>
+      <button id="simpan-akun" class="btn" type="submit">Simpan akun</button>
     </div>
   </form>
 </dialog>
@@ -375,9 +425,64 @@ function tampil(el, teks, tenang) {
   el.hidden = !teks;
 }
 
+// Galat tampil di bawah isiannya sendiri. Mengembalikan teks supaya bisa dipakai sebagai penyaring.
+function galatIsian(id, teks) {
+  const g = $('galat-' + id);
+  g.textContent = teks || '';
+  g.hidden = !teks;
+  $(id).ariaInvalid = teks ? 'true' : null;
+  return teks;
+}
+$('form-masuk').addEventListener('input', e => {
+  const g = $('galat-' + e.target.id);
+  if (g && !g.hidden) galatIsian(e.target.id, '');
+});
+
+// Tombol Tampilkan sandi; sandi disembunyikan lagi setiap formulirnya dibuka ulang.
+function sembunyikanSandi(id) {
+  $(id).type = 'password';
+  document.querySelector(`[data-lihat="${id}"]`).textContent = 'Tampilkan';
+}
+for (const b of document.querySelectorAll('[data-lihat]')) {
+  b.setAttribute('aria-label', 'Tampilkan kata sandi');
+  b.addEventListener('click', () => {
+    const isian = $(b.dataset.lihat), lihat = isian.type === 'password';
+    isian.type = lihat ? 'text' : 'password';
+    b.textContent = lihat ? 'Sembunyikan' : 'Tampilkan';
+    b.setAttribute('aria-label', (lihat ? 'Sembunyikan' : 'Tampilkan') + ' kata sandi');
+  });
+}
+
+// Kerangka berkilau seberbentuk isi yang ditunggu, supaya layar tidak kosong selama memuat.
+function kerangka(wadah, { jumlah = 4, foto = false, kartu = false } = {}) {
+  wadah.replaceChildren(...Array.from({ length: jumlah }, () => {
+    const k = el(kartu ? 'div' : 'li', kartu ? 'kartu kerangka' : 'baris kerangka' + (foto ? '' : ' tanpa-foto'));
+    k.ariaHidden = 'true';
+    if (kartu) k.append(el('span'), el('span'), el('span'), el('span'));
+    else {
+      const isi = el('div', 'isi');
+      isi.append(el('span'), el('span'));
+      if (foto) k.append(el('span'));
+      k.append(isi);
+    }
+    return k;
+  }));
+}
+const masihKerangka = wadah => !!wadah.querySelector('.kerangka');
+
+// Isi baru masuk berurutan. Ditandai sebentar saja, supaya render ulang biasa (mengetik pencarian, Sah/Tolak) tidak ikut beranimasi.
+function masuk(wadah) {
+  [...wadah.children].forEach((c, i) => c.style.setProperty('--i', Math.min(i, 8)));
+  wadah.dataset.masuk = '';
+  clearTimeout(wadah.jamMasuk);
+  wadah.jamMasuk = setTimeout(() => delete wadah.dataset.masuk, 600);
+}
+
 function keLayarMasuk(pesan) {
   admin = null;
   simpan.taruh(null);
+  data = null; // akun berikutnya tidak melihat daftar akun sebelumnya selama memuat
+  kunciDaftar = '';
   atur = null;
   aturBerubah = false;
   mhsData = null;
@@ -411,8 +516,10 @@ $('form-masuk').addEventListener('submit', async e => {
   e.preventDefault();
   const username = $('akun').value;
   const sandi = $('sandi').value;
-  if (!username) return tampil($('pesan-masuk'), 'Pilih akun terlebih dahulu.');
-  if (!sandi) return tampil($('pesan-masuk'), 'Isi kata sandi.');
+  const salah = [['akun', !username && 'Pilih akun Anda.'], ['sandi', !sandi && 'Isi kata sandi.']]
+    .filter(([id, teks]) => galatIsian(id, teks || ''));
+  if (salah.length) return $(salah[0][0]).focus();
+  tampil($('pesan-masuk'), '');
   $('tombol-masuk').disabled = true;
   $('tombol-masuk').textContent = 'Memeriksa…';
   try {
@@ -421,12 +528,13 @@ $('form-masuk').addEventListener('submit', async e => {
     admin = r;
     simpan.taruh(r);
     $('sandi').value = '';
+    sembunyikanSandi('sandi');
     bukaPanel();
   } catch (err) {
     tampil($('pesan-masuk'), 'Server tidak menjawab. Periksa sinyal lalu coba lagi.');
   } finally {
     $('tombol-masuk').disabled = false;
-    $('tombol-masuk').textContent = 'Masuk';
+    $('tombol-masuk').textContent = 'Masuk ke panel';
   }
 });
 
@@ -452,11 +560,16 @@ function bukaPanel() {
 let urutMuat = 0;
 async function muatData() {
   const urut = ++urutMuat;
+  const tanggal = $('tanggal').value;
   tampil($('pesan-panel'), 'Memuat daftar…', true);
+  // Kerangka hanya untuk tanggal baru; muat ulang tanggal yang sama (sesudah Simpan) membiarkan daftar lama tampil.
+  if (!data || data.dimuatUntuk !== tanggal) kerangka($('daftar'), { foto: pilih.tab === 'hadir' });
+  const kosongkan = () => { if (masihKerangka($('daftar'))) $('daftar').replaceChildren(); };
   try {
-    const r = periksa(await panggilUlang('dataHari', { token: admin.token, tanggal: $('tanggal').value }));
+    const r = periksa(await panggilUlang('dataHari', { token: admin.token, tanggal }));
     if (!r || urut !== urutMuat) return;
-    if (r.tolak) return tampil($('pesan-panel'), r.tolak);
+    if (r.tolak) { kosongkan(); return tampil($('pesan-panel'), r.tolak); }
+    r.dimuatUntuk = tanggal;
     data = r;
     if (!data.sesi.includes(pilih.sesi)) pilih.sesi = data.sesi[data.sesi.length - 1] || '';
     const kelasAda = [...new Set([...data.hadir, ...data.belum, ...data.izin].map(x => x.kelas))].sort();
@@ -466,7 +579,7 @@ async function muatData() {
     tampil($('pesan-panel'), data.sesi.length ? '' : 'Tidak ada sesi kuliah pada tanggal ini, atau sesinya belum dibuka.', true);
     gambar();
   } catch (e) {
-    if (urut === urutMuat) tampil($('pesan-panel'), 'Daftar gagal dimuat. Periksa sinyal lalu pilih tanggal lagi.');
+    if (urut === urutMuat) { kosongkan(); tampil($('pesan-panel'), 'Daftar gagal dimuat. Periksa sinyal lalu pilih tanggal lagi.'); }
   }
 }
 
@@ -527,8 +640,11 @@ function gambar() {
   const kosong = { hadir: 'Belum ada presensi yang cocok.', belum: 'Semua sudah presensi atau izin.',
     izin: 'Tidak ada izin yang berlaku atau diajukan pada tanggal ini.' }[pilih.tab];
   $('daftar').replaceChildren(...(isi.length ? isi : [el('li', 'kosong', kosong)]));
+  const kunci = [pilih.tab, pilih.sesi, data.dimuatUntuk, $('kelas').value].join('|');
+  if (kunci !== kunciDaftar) { kunciDaftar = kunci; masuk($('daftar')); }
   for (const img of $('daftar').querySelectorAll('img[data-foto]')) pengamat.observe(img);
 }
+let kunciDaftar = ''; // isi daftar terakhir yang beranimasi masuk
 
 // Foto kecil yang dimuat saat terlihat; diketuk untuk melihat foto besar.
 function tombolFoto(id, label, judul, ket) {
@@ -760,13 +876,16 @@ for (const k in JUDUL_LAYAR) $('layar-' + k).addEventListener('click', () => pil
 async function muatAtur() {
   $('simpan-atur').disabled = true;
   tampil($('pesan-atur'), 'Memuat pengaturan…', true);
+  kerangka($('atur-isi'), { jumlah: 3, kartu: true });
   try {
     const r = periksa(await panggilUlang('ambilPengaturan', { token: admin.token }));
     if (!r) return;
-    if (r.tolak) return tampil($('pesan-atur'), r.tolak);
+    if (r.tolak) { $('atur-isi').replaceChildren(); return tampil($('pesan-atur'), r.tolak); }
     isiAtur(r);
+    masuk($('atur-isi'));
     tampil($('pesan-atur'), '');
   } catch (e) {
+    $('atur-isi').replaceChildren();
     tampil($('pesan-atur'), 'Pengaturan gagal dimuat. Periksa sinyal lalu buka Pengaturan lagi.');
   }
 }
@@ -856,20 +975,24 @@ let mhsDiubah = null; // mahasiswa yang sedang diubah di dialog, null = tambah
 
 for (const d of [$('dialog-mhs'), $('dialog-akun')]) d.querySelector('[data-tutup]').addEventListener('click', () => d.close());
 
-async function muatLayar(fn, pesan, nama, isi) {
+async function muatLayar(fn, pesan, nama, isi, daftar) {
   tampil(pesan, `Memuat ${nama}…`, true);
+  kerangka(daftar);
   try {
     const r = periksa(await panggilUlang(fn, { token: admin.token }));
     if (!r) return;
-    if (r.tolak) return tampil(pesan, r.tolak);
+    if (r.tolak) { daftar.replaceChildren(); return tampil(pesan, r.tolak); }
     tampil(pesan, '');
     isi(r);
+    masuk(daftar);
   } catch (e) {
+    daftar.replaceChildren();
     tampil(pesan, `Daftar ${nama} gagal dimuat. Periksa sinyal lalu buka lagi.`);
   }
 }
 
 async function kirimDialog(tombol, pesan, kerja) {
+  const teks = tombol.textContent;
   tombol.disabled = true;
   tombol.textContent = 'Menyimpan…';
   try {
@@ -881,7 +1004,7 @@ async function kirimDialog(tombol, pesan, kerja) {
     return null;
   } finally {
     tombol.disabled = false;
-    tombol.textContent = 'Simpan';
+    tombol.textContent = teks;
   }
 }
 
@@ -895,7 +1018,7 @@ function tombolAksi(teks, label, klik, kelas) {
 
 const kelasMhs = () => [...new Set((mhsData || []).map(m => m.kelas).filter(Boolean))].sort();
 
-const muatMhs = () => muatLayar('ambilMahasiswa', $('pesan-mhs'), 'mahasiswa', isiMhs);
+const muatMhs = () => muatLayar('ambilMahasiswa', $('pesan-mhs'), 'mahasiswa', isiMhs, $('daftar-mhs'));
 function isiMhs(r) {
   mhsData = r;
   const kelas = kelasMhs();
@@ -919,7 +1042,7 @@ function gambarMhs() {
   }));
   $('daftar-mhs').replaceChildren(...(tampak.length ? tampak.map(barisMhs) : [el('li', 'kosong', 'Tidak ada mahasiswa yang cocok.')]));
 }
-$('mhs-kelas').addEventListener('change', gambarMhs);
+$('mhs-kelas').addEventListener('change', () => { gambarMhs(); masuk($('daftar-mhs')); });
 $('mhs-cari').addEventListener('input', gambarMhs);
 
 function barisMhs(m) {
@@ -965,7 +1088,7 @@ $('form-mhs').addEventListener('submit', async e => {
   muatData(); // daftar "Belum presensi" ikut berubah
 });
 
-const muatDaftarAkun = () => muatLayar('ambilAkun', $('pesan-akun'), 'akun', isiAkun);
+const muatDaftarAkun = () => muatLayar('ambilAkun', $('pesan-akun'), 'akun', isiAkun, $('daftar-akun'));
 const NAMA_AKSES = { UTAMA: 'Akses UTAMA', SEMUA: 'Semua kelas' };
 function isiAkun(r) {
   akunData = r;
@@ -990,6 +1113,7 @@ function bukaAkun(a) {
   $('akun-isi-nama').readOnly = !!a; // ganti nama = hapus lalu tambah, supaya catatan diverifikasi_oleh lama tetap jelas
   $('akun-isi-akses').value = a ? a.akses : '';
   $('akun-isi-sandi').value = '';
+  sembunyikanSandi('akun-isi-sandi');
   $('label-sandi').textContent = a ? 'Kata sandi baru (kosongkan jika tidak diganti)' : 'Kata sandi (minimal 8 karakter)';
   tampil($('pesan-dialog-akun'), '');
   $('dialog-akun').showModal();
