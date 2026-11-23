@@ -53,7 +53,7 @@ body {
 ::selection { background: var(--color-accent); color: var(--color-accent-ink); }
 :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 [hidden] { display: none !important; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 
 main {
   width: 100%; max-width: var(--container); margin-inline: auto;
@@ -94,13 +94,29 @@ form {
 }
 .bidang { min-width: 0; }
 label { display: block; margin-bottom: var(--space-2xs); color: var(--color-muted); font-size: var(--text-sm); }
-input {
+input, select, textarea {
   width: 100%; min-width: 0; height: var(--control); padding: 0 var(--space-md);
   border: 1px solid var(--color-muted); border-radius: var(--radius-input);
   background: var(--color-card); color: var(--color-ink);
   outline: 2px solid transparent; outline-offset: -3px;
 }
-input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -3px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -3px; }
+textarea { height: auto; min-height: 5.5rem; padding-block: var(--space-sm); resize: vertical; line-height: 1.4; }
+input[type="date"] { padding-inline: var(--space-sm); }
+
+/* Pilihan Presensi atau Izin */
+.mode { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs); border-radius: var(--radius-input); background: var(--color-paper-2); }
+.mode button {
+  min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;
+  color: var(--color-muted); font-weight: 600; cursor: pointer; touch-action: manipulation;
+}
+.mode button[aria-pressed="true"] { background: var(--color-card); color: var(--color-ink); box-shadow: var(--shadow-card); }
+.mode button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.panel { display: grid; gap: var(--space-md); min-width: 0; }
+.dua { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
+.pratinjau-bukti { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.pratinjau-bukti:not(:empty) { margin-top: var(--space-sm); }
+.pratinjau-bukti img { width: 5rem; height: 5rem; object-fit: cover; border-radius: var(--radius-input); }
 input::placeholder { color: var(--color-muted); opacity: 1; font-size: var(--text-sm); }
 #nim { font-variant-numeric: tabular-nums; }
 .pemilik {
@@ -147,7 +163,8 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
 .terima dd { overflow-wrap: break-word; font-variant-numeric: tabular-nums; }
 
 @media (hover: hover) {
-  input:not(:disabled):hover { background: var(--color-paper-2); }
+  input:not(:disabled):hover, select:not(:disabled):hover, textarea:not(:disabled):hover { background: var(--color-paper-2); }
+  .mode button[aria-pressed="false"]:hover { color: var(--color-ink); }
   .btn--primary:not(:disabled, :active):hover { --edge: 7px; translate: 0 -2px; }
 }
 @media (max-width: 22rem) {
@@ -174,6 +191,11 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
 
   <div class="lembar">
   <form id="form" novalidate hidden>
+    <div class="mode" role="group" aria-label="Jenis kiriman">
+      <button type="button" id="mode-presensi" aria-pressed="true">Presensi</button>
+      <button type="button" id="mode-izin" aria-pressed="false">Izin</button>
+    </div>
+
     <div class="bidang">
       <label for="nim">NIM</label>
       <input id="nim" name="nim" type="text" inputmode="numeric" placeholder="14 angka" aria-describedby="pemilik">
@@ -183,11 +205,56 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
       </div>
     </div>
 
-    <div class="bidang">
-      <label for="foto">Foto Timemark</label>
-      <input id="foto" type="file" accept="image/jpeg,image/png" aria-describedby="bantu-foto">
-      <div class="bantu" id="bantu-foto">Foto wajah dan kartu identitas, rasio 1:1, dari aplikasi Timemark.</div>
-      <img id="pratinjau" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" alt="Pratinjau foto yang dipilih" hidden>
+    <div id="panel-presensi" class="panel">
+      <div class="bidang">
+        <label for="foto">Foto Timemark</label>
+        <input id="foto" type="file" accept="image/jpeg,image/png" aria-describedby="bantu-foto">
+        <div class="bantu" id="bantu-foto">Foto wajah dan kartu identitas, rasio 1:1, dari aplikasi Timemark.</div>
+        <img id="pratinjau" src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=" alt="Pratinjau foto yang dipilih" hidden>
+      </div>
+    </div>
+
+    <div id="panel-izin" class="panel" hidden>
+      <div class="bidang">
+        <label for="jenis">Jenis izin</label>
+        <!-- Nilai harus sama dengan JENIS_IZIN dan CAKUPAN_IZIN di Code.gs -->
+        <select id="jenis">
+          <option value="">Pilih jenis</option>
+          <option>Sakit</option>
+          <option>Keperluan keluarga</option>
+          <option>Kegiatan kampus</option>
+          <option>Lainnya</option>
+        </select>
+      </div>
+      <div class="bidang">
+        <label for="cakupan">Berlaku untuk</label>
+        <select id="cakupan">
+          <option value="SEHARI">Sehari penuh (Pagi dan Sore)</option>
+          <option value="PAGI">Setengah hari, sesi Pagi</option>
+          <option value="SORE">Setengah hari, sesi Sore</option>
+        </select>
+      </div>
+      <div class="dua">
+        <div class="bidang">
+          <label for="mulai" id="label-mulai">Dari tanggal</label>
+          <input id="mulai" type="date">
+        </div>
+        <div class="bidang" id="bidang-selesai">
+          <label for="selesai">Sampai tanggal</label>
+          <input id="selesai" type="date" aria-describedby="bantu-selesai">
+        </div>
+      </div>
+      <div class="bantu" id="bantu-selesai">Kosongkan "Sampai tanggal" untuk izin satu hari.</div>
+      <div class="bidang">
+        <label for="alasan">Alasan</label>
+        <textarea id="alasan" maxlength="300" rows="3" placeholder="Contoh: demam sejak semalam, berobat ke klinik."></textarea>
+      </div>
+      <div class="bidang">
+        <label for="bukti">Foto bukti, 1 sampai 3</label>
+        <input id="bukti" type="file" accept="image/jpeg,image/png" multiple aria-describedby="bantu-bukti">
+        <div class="bantu" id="bantu-bukti">Surat dokter, undangan, atau bukti lain. Pilih semua fotonya sekaligus.</div>
+        <div id="pratinjau-bukti" class="pratinjau-bukti"></div>
+      </div>
     </div>
 
     <div id="pesan" class="pesan" role="alert" hidden></div>
@@ -195,14 +262,8 @@ input[type="file"]:active::file-selector-button { box-shadow: inset 0 -1px 0 var
   </form>
 
   <section id="terima" class="terima" hidden tabindex="-1">
-    <strong>Presensi tercatat.</strong>
-    <dl>
-      <dt>Nama</dt><dd id="t-nama"></dd>
-      <dt>NIM</dt><dd id="t-nim"></dd>
-      <dt>Sesi</dt><dd id="t-sesi"></dd>
-      <dt>Status</dt><dd id="t-status"></dd>
-      <dt>Jam</dt><dd id="t-jam"></dd>
-    </dl>
+    <strong id="t-judul">Presensi tercatat.</strong>
+    <dl id="t-isi"></dl>
   </section>
   </div>
 </main>
@@ -251,6 +312,48 @@ let pemilik = null;   // { nim, kelas, nama } yang sudah dikonfirmasi server
 let mencari = '';     // NIM yang sedang diperiksa
 let fotoBase64 = '';
 let tekan = null;     // { nim, foto, waktu } saat Kirim pertama ditekan, sampai server menjawab
+let mode = 'presensi';
+let buktiBase64 = []; // 1–3 foto bukti izin yang sudah dikompres
+const MAKS_BUKTI = 3; // sama dengan Code.gs
+
+function teksKirim() { return mode === 'izin' ? 'Kirim izin' : 'Kirim presensi'; }
+
+function pilihMode(m) {
+  mode = m;
+  $('mode-presensi').setAttribute('aria-pressed', String(m === 'presensi'));
+  $('mode-izin').setAttribute('aria-pressed', String(m === 'izin'));
+  $('panel-presensi').hidden = m !== 'presensi';
+  $('panel-izin').hidden = m !== 'izin';
+  $('kirim').textContent = teksKirim();
+  tampilPesan('');
+}
+$('mode-presensi').addEventListener('click', () => pilihMode('presensi'));
+$('mode-izin').addEventListener('click', () => pilihMode('izin'));
+
+// Setengah hari hanya satu tanggal.
+$('cakupan').addEventListener('change', () => {
+  const sehari = $('cakupan').value === 'SEHARI';
+  $('bidang-selesai').hidden = !sehari;
+  $('bantu-selesai').hidden = !sehari;
+  $('label-mulai').textContent = sehari ? 'Dari tanggal' : 'Tanggal';
+});
+const hariIni = new Date();
+$('mulai').value = [hariIni.getFullYear(), String(hariIni.getMonth() + 1).padStart(2, '0'),
+  String(hariIni.getDate()).padStart(2, '0')].join('-');
+
+function tampilTerima(judul, isi) {
+  $('t-judul').textContent = judul;
+  $('t-isi').replaceChildren(...isi.flatMap(([k, v]) => {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = k;
+    dd.textContent = v;
+    return [dt, dd];
+  }));
+  $('form').hidden = true;
+  $('terima').hidden = false;
+  $('terima').focus();
+}
 
 function tampilSesi(s) {
   const el = $('sesi');
@@ -345,6 +448,78 @@ $('foto').addEventListener('change', async () => {
   }
 });
 
+let pilihanBukti = 0;
+$('bukti').addEventListener('change', async () => {
+  const pilihan = ++pilihanBukti;
+  buktiBase64 = [];
+  $('pratinjau-bukti').replaceChildren();
+  tampilPesan('');
+  const files = [...$('bukti').files];
+  if (!files.length) return;
+  if (files.length > MAKS_BUKTI) {
+    $('bukti').value = '';
+    return tampilPesan(`Paling banyak ${MAKS_BUKTI} foto bukti. Pilih ulang.`);
+  }
+  try {
+    const hasil = await Promise.all(files.map(kompres));
+    if (pilihan !== pilihanBukti) return;
+    buktiBase64 = hasil.map(u => u.split(',')[1]);
+    $('pratinjau-bukti').replaceChildren(...hasil.map((u, i) => {
+      const img = document.createElement('img');
+      img.src = u;
+      img.alt = `Pratinjau bukti ${i + 1}`;
+      return img;
+    }));
+  } catch (e) {
+    if (pilihan === pilihanBukti) tampilPesan('Foto bukti tidak bisa dibuka. Pilih foto JPEG atau PNG.');
+  }
+});
+
+const pesanUlang = teks => () => {
+  $('kirim').textContent = 'Mencoba lagi…';
+  tampilPesan(teks, 'tunggu');
+};
+
+async function kirimPresensi() {
+  if (!fotoBase64) return tampilPesan('Pilih foto Timemark terlebih dahulu.');
+  // Menekan Kirim lagi setelah gagal tidak mengulang hitungan, selama NIM dan fotonya sama.
+  if (!tekan || tekan.nim !== pemilik.nim || tekan.foto !== fotoBase64) tekan = { nim: pemilik.nim, foto: fotoBase64, waktu: Date.now() };
+  const kiriman = () => [{ nim: tekan.nim, foto: tekan.foto, tunda: Date.now() - tekan.waktu }];
+  try {
+    const r = await panggilUlang('kirimPresensi', kiriman, pesanUlang(
+      'Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman. Waktu Anda menekan Kirim tetap dihitung, sampai 5 menit.'));
+    tekan = null;
+    tampilPesan('');
+    if (r.tolak) return tampilPesan(r.tolak);
+    tampilTerima('Presensi tercatat.', [['Nama', r.nama], ['NIM', r.nim], ['Sesi', r.sesi === 'PAGI' ? 'Pagi' : 'Sore'],
+      ['Status', r.status === 'HADIR' ? 'Hadir' : 'Terlambat'], ['Jam', r.jam]]);
+  } catch (err) {
+    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Kirim lagi, dan simpan foto Timemark sebagai bukti waktu.');
+  }
+}
+
+async function kirimIzin() {
+  const sehari = $('cakupan').value === 'SEHARI';
+  const data = { nim: pemilik.nim, jenis: $('jenis').value, cakupan: $('cakupan').value, mulai: $('mulai').value,
+    selesai: sehari ? $('selesai').value || $('mulai').value : $('mulai').value, alasan: $('alasan').value.trim(), bukti: buktiBase64 };
+  if (!data.jenis) return tampilPesan('Pilih jenis izin.');
+  if (!data.mulai) return tampilPesan('Isi tanggal izin.');
+  if (data.selesai < data.mulai) return tampilPesan('"Sampai tanggal" tidak boleh sebelum "Dari tanggal".');
+  if (!data.alasan) return tampilPesan('Tulis alasan izin.');
+  if (!data.bukti.length) return tampilPesan('Pilih 1 sampai 3 foto bukti.');
+  try {
+    // Data yang sama di tiap percobaan: jika yang pertama ternyata tercatat, server mengembalikan tanda terimanya.
+    const r = await panggilUlang('ajukanIzin', [data], pesanUlang('Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman.'));
+    tampilPesan('');
+    if (r.tolak) return tampilPesan(r.tolak);
+    tampilTerima('Izin tercatat.', [['Nama', r.nama], ['NIM', r.nim], ['Jenis', r.jenis], ['Berlaku', r.cakupan],
+      ['Tanggal', r.mulai === r.selesai ? r.mulai : `${r.mulai} s.d. ${r.selesai}`], ['Nomor', r.id]]);
+  } catch (err) {
+    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Kirim izin lagi.');
+  }
+}
+
+const ISIAN = ['nim', 'foto', 'jenis', 'cakupan', 'mulai', 'selesai', 'alasan', 'bukti', 'kirim', 'mode-presensi', 'mode-izin'];
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   if (!pemilik || pemilik.nim !== $('nim').value) {
@@ -353,34 +528,14 @@ $('form').addEventListener('submit', async e => {
     $('nim').focus();
     return tampilPesan('Masukkan NIM sampai nama Anda muncul, lalu tekan Kirim.');
   }
-  if (!fotoBase64) return tampilPesan('Pilih foto Timemark terlebih dahulu.');
   tampilPesan('');
-  // Menekan Kirim lagi setelah gagal tidak mengulang hitungan, selama NIM dan fotonya sama.
-  if (!tekan || tekan.nim !== pemilik.nim || tekan.foto !== fotoBase64) tekan = { nim: pemilik.nim, foto: fotoBase64, waktu: Date.now() };
-  const kiriman = () => [{ nim: tekan.nim, foto: tekan.foto, tunda: Date.now() - tekan.waktu }];
-  for (const id of ['nim', 'foto', 'kirim']) $(id).disabled = true;
+  for (const id of ISIAN) $(id).disabled = true;
   $('kirim').textContent = 'Mengirim…';
   try {
-    const r = await panggilUlang('kirimPresensi', kiriman, () => {
-      $('kirim').textContent = 'Mencoba lagi…';
-      tampilPesan('Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman. Waktu Anda menekan Kirim tetap dihitung, sampai 5 menit.', 'tunggu');
-    });
-    tekan = null;
-    tampilPesan('');
-    if (r.tolak) return tampilPesan(r.tolak);
-    $('t-nama').textContent = r.nama;
-    $('t-nim').textContent = r.nim;
-    $('t-sesi').textContent = r.sesi === 'PAGI' ? 'Pagi' : 'Sore';
-    $('t-status').textContent = r.status === 'HADIR' ? 'Hadir' : 'Terlambat';
-    $('t-jam').textContent = r.jam;
-    $('form').hidden = true;
-    $('terima').hidden = false;
-    $('terima').focus();
-  } catch (err) {
-    tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Kirim lagi, dan simpan foto Timemark sebagai bukti waktu.');
+    await (mode === 'izin' ? kirimIzin() : kirimPresensi());
   } finally {
-    for (const id of ['nim', 'foto', 'kirim']) $(id).disabled = false;
-    $('kirim').textContent = 'Kirim presensi';
+    for (const id of ISIAN) $(id).disabled = false;
+    $('kirim').textContent = teksKirim();
   }
 });
 
