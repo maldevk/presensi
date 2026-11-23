@@ -130,6 +130,10 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .ringkas { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
 .ringkas li { padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-pill); background: var(--color-paper-2); font-size: var(--text-sm); }
 .ringkas b { font-variant-numeric: tabular-nums; }
+.perbarui { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); color: var(--color-muted); }
+/* Baris yang baru datang lewat pembaruan otomatis disorot kuning sebentar supaya admin melihatnya. */
+.daftar > li[data-baru] { animation: sorot 2.4s ease-out; }
+@keyframes sorot { from { background-color: oklch(93% 0.1 96); } }
 
 /* Daftar */
 .daftar { display: grid; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
@@ -207,12 +211,12 @@ dialog p { margin: var(--space-sm) 0; }
 }
 /* Yang baru muncul masuk dengan pudar dan turun singkat supaya tidak terasa patah; saat hilang langsung lenyap. */
 #layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
-.pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open] {
+.pesan, .galat-isian, .libur, [data-masuk] > *, .daftar > li[data-baru], dialog[open] {
   transition: opacity 200ms var(--ease-snap), translate 200ms var(--ease-snap);
 }
 @starting-style {
   #layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
-  .pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open] { opacity: 0; translate: 0 -6px; }
+  .pesan, .galat-isian, .libur, [data-masuk] > *, .daftar > li[data-baru], dialog[open] { opacity: 0; translate: 0 -6px; }
 }
 /* Baris daftar masuk berurutan, hanya saat isi daftar berganti (tab, sesi, tanggal, kelas), bukan saat mengetik pencarian. */
 [data-masuk] > * { transition-delay: calc(var(--i, 0) * 30ms); }
@@ -223,7 +227,7 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
 
 @media (prefers-reduced-motion: reduce) {
   #layar-masuk, #layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun, #pilih-sesi, #kartu-libur,
-  .pesan, .galat-isian, .libur, [data-masuk] > *, dialog[open], dialog[open]::backdrop, .toast { transition: none; }
+  .pesan, .galat-isian, .libur, [data-masuk] > *, .daftar > li[data-baru], dialog[open], dialog[open]::backdrop, .toast { transition: none; }
   .kerangka span { animation: none; }
   .btn, .pilihan button { transition: none; }
   .btn:active { translate: none; }
@@ -285,6 +289,10 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
 
     <div id="pilih-sesi" class="pilihan" role="group" aria-label="Sesi"></div>
     <ul id="ringkas" class="ringkas" aria-live="polite"></ul>
+    <div id="perbarui-baris" class="perbarui" hidden>
+      <span id="status-perbarui"></span>
+      <button id="perbarui" class="btn-tipis" type="button">Perbarui sekarang</button>
+    </div>
     <div class="pilihan" role="group" aria-label="Daftar">
       <button type="button" id="tab-hadir" aria-pressed="true">Sudah presensi</button>
       <button type="button" id="tab-belum" aria-pressed="false">Belum presensi</button>
@@ -484,6 +492,8 @@ function keLayarMasuk(pesan) {
   simpan.taruh(null);
   data = null; // akun berikutnya tidak melihat daftar akun sebelumnya selama memuat
   kunciDaftar = '';
+  clearTimeout(jamPerbarui);
+  $('perbarui-baris').hidden = true;
   atur = null;
   aturBerubah = false;
   mhsData = null;
@@ -556,35 +566,104 @@ function bukaPanel() {
   $('pilih-layar').hidden = admin.akses !== 'UTAMA';
   if (!$('tanggal').value) $('tanggal').value = hariIni();
   muatData();
+  jadwalkanPerbarui();
 }
 
-let urutMuat = 0;
-async function muatData() {
+let urutMuat = 0, memuat = false;
+let ubahanKe = 0; // naik setiap admin menekan Sah/Tolak, untuk membuang jawaban server yang lebih tua dari pilihan itu
+// senyap: pembaruan otomatis atau tombol Perbarui; tanpa kerangka dan pesan, dan daftar lama tetap bila gagal.
+async function muatData(senyap = false) {
   const urut = ++urutMuat;
   const tanggal = $('tanggal').value;
-  tampil($('pesan-panel'), 'Memuat daftar…', true);
-  // Kerangka hanya untuk tanggal baru; muat ulang tanggal yang sama (sesudah Simpan) membiarkan daftar lama tampil.
-  if (!data || data.dimuatUntuk !== tanggal) kerangka($('daftar'), { foto: pilih.tab === 'hadir' });
+  const ubahanAwal = ubahanKe;
+  memuat = true;
+  if (!senyap) {
+    tampil($('pesan-panel'), 'Memuat daftar…', true);
+    // Kerangka hanya untuk tanggal baru; muat ulang tanggal yang sama (sesudah Simpan) membiarkan daftar lama tampil.
+    if (!data || data.dimuatUntuk !== tanggal) kerangka($('daftar'), { foto: pilih.tab === 'hadir' });
+  }
   const kosongkan = () => { if (masihKerangka($('daftar'))) $('daftar').replaceChildren(); };
   try {
     const r = periksa(await panggilUlang('dataHari', { token: admin.token, tanggal }));
     if (!r || urut !== urutMuat) return;
-    if (r.tolak) { kosongkan(); return tampil($('pesan-panel'), r.tolak); }
+    if (senyap && (ubahanKe !== ubahanAwal || belumTersimpan || catatanBelumDisimpan())) return; // coba lagi di putaran berikutnya
+    if (r.tolak) {
+      if (senyap) return tandaiPerbarui(false);
+      kosongkan();
+      return tampil($('pesan-panel'), r.tolak);
+    }
     r.dimuatUntuk = tanggal;
     data = r;
     if (!data.sesi.includes(pilih.sesi)) pilih.sesi = data.sesi[data.sesi.length - 1] || '';
     const kelasAda = [...new Set([...data.hadir, ...data.belum, ...data.izin].map(x => x.kelas))].sort();
     const kelas = $('kelas').value;
-    $('kelas').replaceChildren(new Option('Semua kelas', ''), ...kelasAda.map(k => new Option('Kelas ' + k, k)));
-    $('kelas').value = kelasAda.includes(kelas) ? kelas : '';
+    // Opsi dibuat ulang hanya bila daftar kelas berubah, supaya pilihan yang sedang dibuka tidak tertutup.
+    if ([...$('kelas').options].slice(1).map(o => o.value).join() !== kelasAda.join()) {
+      $('kelas').replaceChildren(new Option('Semua kelas', ''), ...kelasAda.map(k => new Option('Kelas ' + k, k)));
+      $('kelas').value = kelasAda.includes(kelas) ? kelas : '';
+    }
     tampil($('pesan-panel'), data.sesi.length ? '' : 'Tidak ada sesi kuliah pada tanggal ini, atau sesinya belum dibuka.', true);
-    gambar();
+    // Fokus keyboard di daftar dikembalikan ke tombol yang sama sesudah daftar digambar ulang.
+    const aktif = document.activeElement;
+    const fokus = $('daftar').contains(aktif) && aktif.getAttribute('aria-label');
+    gambar(senyap);
+    if (fokus) { const b = $('daftar').querySelector(`[aria-label="${CSS.escape(fokus)}"]`); if (b) b.focus({ preventScroll: true }); }
+    tandaiPerbarui(true);
   } catch (e) {
-    if (urut === urutMuat) { kosongkan(); tampil($('pesan-panel'), 'Daftar gagal dimuat. Periksa sinyal lalu pilih tanggal lagi.'); }
+    if (urut !== urutMuat) return;
+    if (senyap) return tandaiPerbarui(false);
+    kosongkan();
+    tampil($('pesan-panel'), 'Daftar gagal dimuat. Periksa sinyal lalu pilih tanggal lagi.');
+  } finally {
+    if (urut === urutMuat) memuat = false;
   }
 }
 
-$('tanggal').addEventListener('change', muatData);
+// Daftar hari ini diperbarui sendiri tiap 30 detik selama panel Presensi harian dilihat, supaya admin yang
+// menunggu kelasnya melihat mahasiswa yang baru presensi. Dilewati selama ada Sah/Tolak atau catatan yang belum tersimpan.
+const JEDA_PERBARUI_MS = 30000;
+let jamPerbarui = 0, terakhirDiperbarui = 0;
+function catatanBelumDisimpan() {
+  return [...$('daftar').querySelectorAll('.baris.izin input')].some(i => i.value !== i.defaultValue || i === document.activeElement);
+}
+function bolehPerbarui() {
+  return !!admin && !!data && !memuat && !belumTersimpan && !catatanBelumDisimpan() && document.visibilityState === 'visible'
+    && !$('layar-panel').hidden && !$('bagian-harian').hidden && $('tanggal').value === hariIni();
+}
+function jadwalkanPerbarui() {
+  clearTimeout(jamPerbarui);
+  jamPerbarui = setTimeout(async () => {
+    if (bolehPerbarui()) await muatData(true);
+    jadwalkanPerbarui();
+  }, JEDA_PERBARUI_MS);
+}
+// Kembali ke tab panel: langsung segarkan bila sudah lebih dari 10 detik.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - terakhirDiperbarui > 10000 && bolehPerbarui()) muatData(true);
+});
+function tandaiPerbarui(berhasil) {
+  const jam = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const otomatis = $('tanggal').value === hariIni();
+  if (berhasil) terakhirDiperbarui = Date.now();
+  $('status-perbarui').textContent = berhasil
+    ? `Diperbarui pukul ${jam}` + (otomatis ? ', otomatis tiap 30 detik.' : '.')
+    : `Gagal memperbarui pukul ${jam}.` + (otomatis ? ' Dicoba lagi otomatis.' : ' Tekan Perbarui sekarang untuk mencoba lagi.');
+  $('perbarui-baris').hidden = false;
+}
+$('perbarui').addEventListener('click', async () => {
+  const b = $('perbarui');
+  b.disabled = true;
+  b.textContent = 'Memperbarui…';
+  try {
+    if (!memuat) await muatData(true);
+  } finally {
+    b.disabled = false;
+    b.textContent = 'Perbarui sekarang';
+    jadwalkanPerbarui();
+  }
+});
+
+$('tanggal').addEventListener('change', () => muatData());
 $('kelas').addEventListener('change', () => gambar());
 $('cari').addEventListener('input', () => gambar());
 for (const [id, tab] of [['tab-hadir', 'hadir'], ['tab-belum', 'belum'], ['tab-izin', 'izin']]) {
@@ -606,7 +685,8 @@ function el(tag, kelas, teks) {
   return e;
 }
 
-function gambar() {
+// tandaiBaru: dari pembaruan otomatis; baris yang belum ada sebelumnya masuk dan disorot sebentar.
+function gambar(tandaiBaru) {
   if (!data) return;
   $('pilih-sesi').replaceChildren(...data.sesi.map(s => {
     const b = el('button', '', 'Sesi ' + NAMA_SESI[s]);
@@ -640,9 +720,11 @@ function gambar() {
     : data.pengajuan.filter(x => cocok(x, true)).map(barisIzin);
   const kosong = { hadir: 'Belum ada presensi yang cocok.', belum: 'Semua sudah presensi atau izin.',
     izin: 'Tidak ada izin yang berlaku atau diajukan pada tanggal ini.' }[pilih.tab];
+  const lama = new Set([...$('daftar').children].map(c => c.dataset.kunci));
   $('daftar').replaceChildren(...(isi.length ? isi : [el('li', 'kosong', kosong)]));
   const kunci = [pilih.tab, pilih.sesi, data.dimuatUntuk, $('kelas').value].join('|');
   if (kunci !== kunciDaftar) { kunciDaftar = kunci; masuk($('daftar')); }
+  else if (tandaiBaru) for (const li of $('daftar').children) if (li.dataset.kunci && !lama.has(li.dataset.kunci)) li.dataset.baru = '';
   for (const img of $('daftar').querySelectorAll('img[data-foto]')) pengamat.observe(img);
 }
 let kunciDaftar = ''; // isi daftar terakhir yang beranimasi masuk
@@ -663,6 +745,7 @@ function tombolFoto(id, label, judul, ket) {
 
 function barisHadir(x) {
   const li = el('li', 'baris' + (x.verifikasi === 'TOLAK' ? ' ditolak' : ''));
+  li.dataset.kunci = 'p:' + x.foto;
   const foto = tombolFoto(x.foto, 'Lihat foto ' + x.nama, x.nama,
     `${x.nim}, kelas ${x.kelas}, sesi ${NAMA_SESI[x.sesi]} pukul ${x.jam}.`);
 
@@ -691,6 +774,7 @@ function barisHadir(x) {
 
 function barisBelum(x) {
   const li = el('li', 'baris tanpa-foto');
+  li.dataset.kunci = 'b:' + x.nim;
   const isi = el('div', 'isi');
   isi.append(el('div', 'nama', x.nama), el('div', 'ket', `${x.nim}, kelas ${x.kelas}`));
   li.append(isi);
@@ -700,6 +784,7 @@ function barisBelum(x) {
 const NAMA_CAKUPAN = { SEHARI: 'Sehari penuh', PAGI: 'Setengah hari Pagi', SORE: 'Setengah hari Sore' };
 function barisIzin(x) {
   const li = el('li', 'baris tanpa-foto izin' + (x.status === 'TOLAK' ? ' ditolak' : ''));
+  li.dataset.kunci = 'i:' + x.id;
   const isi = el('div', 'isi');
   const tanggal = x.mulai === x.selesai ? x.mulai : `${x.mulai} s.d. ${x.selesai}`;
   isi.append(el('div', 'nama', x.nama), el('div', 'ket', `${x.nim}, kelas ${x.kelas}, diajukan ${x.diajukan}`),
@@ -716,7 +801,7 @@ function barisIzin(x) {
   const catatan = el('input');
   catatan.type = 'text';
   catatan.maxLength = 300;
-  catatan.value = x.catatan;
+  catatan.defaultValue = x.catatan; // pembanding untuk catatanBelumDisimpan()
   catatan.placeholder = 'Catatan untuk mahasiswa (opsional)';
   catatan.setAttribute('aria-label', 'Catatan izin ' + x.nama);
   isi.append(catatan);
@@ -755,6 +840,7 @@ function simpanBelakang(kunci, nama, kerja) {
 }
 
 function ubah(x, nilai, diam) {
+  ubahanKe++;
   const lama = x.verifikasi;
   x.verifikasi = nilai;
   x.oleh = nilai === 'BELUM' ? '' : admin.username;
@@ -767,6 +853,7 @@ function ubah(x, nilai, diam) {
 }
 
 function ubahIzinKlik(x, nilai, catatan, diam) {
+  ubahanKe++;
   const lama = { status: x.status, catatan: x.catatan };
   x.status = nilai;
   x.catatan = catatan;
