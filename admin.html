@@ -421,7 +421,7 @@ function barisHadir(x) {
     b.setAttribute('aria-pressed', String(x.verifikasi === nilai));
     b.setAttribute('aria-label', `${teks} presensi ${x.nama}`);
     // Menekan tombol yang sedang aktif mengembalikan ke BELUM.
-    b.addEventListener('click', () => ubah(x, x.verifikasi === nilai ? 'BELUM' : nilai, aksi));
+    b.addEventListener('click', () => ubah(x, x.verifikasi === nilai ? 'BELUM' : nilai));
     aksi.append(b);
   }
   li.append(tombolFoto, isi, aksi);
@@ -436,26 +436,36 @@ function barisBelum(x) {
   return li;
 }
 
-async function ubah(x, nilai, aksi, diam) {
+// Perubahan langsung tampil; penyimpanan berjalan di belakang, berurutan per presensi.
+// Jika gagal, daftar dimuat ulang dari Sheet supaya layar tidak menyimpang dari data.
+const antreUbah = new Map(); // foto -> janji penyimpanan terakhir
+let belumTersimpan = 0;
+function ubah(x, nilai, diam) {
   const lama = x.verifikasi;
-  for (const b of aksi.querySelectorAll('button')) b.disabled = true;
-  try {
-    const r = periksa(await panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
-    if (!r) return;
-    if (r.tolak) return beriTahu(r.tolak);
-    x.verifikasi = r.verifikasi;
-    x.oleh = r.oleh;
-    gambar();
-    if (!diam) {
-      const teks = { OK: 'ditandai sah', TOLAK: 'ditolak, tidak dihitung hadir', BELUM: 'dikembalikan ke belum diperiksa' }[nilai];
-      beriTahu(`${x.nama} ${teks}.`, () => ubah(x, lama, aksi, true));
-    }
-  } catch (e) {
-    beriTahu('Gagal menyimpan. Periksa sinyal lalu coba lagi.');
-  } finally {
-    for (const b of aksi.querySelectorAll('button')) b.disabled = false;
+  x.verifikasi = nilai;
+  x.oleh = nilai === 'BELUM' ? '' : admin.username;
+  gambar();
+  if (!diam) {
+    const teks = { OK: 'ditandai sah', TOLAK: 'ditolak, tidak dihitung hadir', BELUM: 'dikembalikan ke belum diperiksa' }[nilai];
+    beriTahu(`${x.nama} ${teks}.`, () => ubah(x, lama, true));
   }
+  belumTersimpan++;
+  const simpanIni = (antreUbah.get(x.foto) || Promise.resolve()).then(async () => {
+    const r = periksa(await panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
+    if (r && r.tolak) throw new Error(r.tolak);
+  }).catch(e => {
+    if (!admin) return; // sesi habis: sudah kembali ke layar masuk
+    beriTahu(`Perubahan ${x.nama} tidak tersimpan. ${e.message.startsWith('Mahasiswa') ? e.message : 'Periksa sinyal lalu coba lagi.'}`);
+    muatData();
+  }).finally(() => {
+    belumTersimpan--;
+    if (antreUbah.get(x.foto) === simpanIni) antreUbah.delete(x.foto);
+  });
+  antreUbah.set(x.foto, simpanIni);
 }
+window.addEventListener('beforeunload', e => {
+  if (belumTersimpan) e.preventDefault(); // peramban menampilkan peringatan bawaan
+});
 
 let jamToast = 0;
 function beriTahu(teks, batalkan) {
