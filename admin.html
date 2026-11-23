@@ -123,6 +123,12 @@ legend { float: left; width: 100%; margin-bottom: var(--space-xs); padding: 0; f
 .libur { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); align-items: center; }
 .libur .lebar { grid-column: 1 / -1; }
 .simpan-atur { display: grid; gap: var(--space-sm); }
+#pilih-layar { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.baris.nonaktif .nama { color: var(--color-muted); }
+form.isi-dialog { display: grid; gap: var(--space-sm); }
+.centang { display: flex; align-items: center; gap: var(--space-xs); margin: 0; color: var(--color-ink); font-size: var(--text-md); }
+.centang input { width: 1.5rem; height: 1.5rem; padding: 0; accent-color: var(--color-accent-deep); }
+.tombol-dialog { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-xs); }
 
 /* Foto besar */
 dialog { width: min(32rem, calc(100vw - 2 * var(--space-md))); padding: var(--space-md); border: 0; border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); }
@@ -150,6 +156,7 @@ dialog p { margin: var(--space-sm) 0; }
   .isian { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .libur { grid-template-columns: 11rem minmax(0, 1fr) auto; }
   .libur .lebar { grid-column: auto; }
+  #pilih-layar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }
@@ -183,6 +190,8 @@ dialog p { margin: var(--space-sm) 0; }
     <div id="pilih-layar" class="pilihan" role="group" aria-label="Halaman panel" hidden>
       <button type="button" id="layar-harian" aria-pressed="true">Presensi harian</button>
       <button type="button" id="layar-atur" aria-pressed="false">Pengaturan</button>
+      <button type="button" id="layar-mhs" aria-pressed="false">Mahasiswa</button>
+      <button type="button" id="layar-akun" aria-pressed="false">Akun</button>
     </div>
 
     <div id="bagian-harian">
@@ -226,6 +235,30 @@ dialog p { margin: var(--space-sm) 0; }
         <button id="simpan-atur" class="btn" type="button" disabled>Simpan pengaturan</button>
       </div>
     </div>
+
+    <div id="bagian-mhs" class="daftar" hidden>
+      <div class="saring" role="group" aria-label="Saring mahasiswa">
+        <div>
+          <label for="mhs-kelas">Kelas</label>
+          <select id="mhs-kelas"><option value="">Semua kelas</option></select>
+        </div>
+        <div class="lebar">
+          <label for="mhs-cari">Cari nama atau NIM</label>
+          <input id="mhs-cari" type="search" autocomplete="off">
+        </div>
+      </div>
+      <div><button id="tambah-mhs" class="btn-tipis" type="button">Tambah mahasiswa</button></div>
+      <ul id="ringkas-mhs" class="ringkas" aria-live="polite"></ul>
+      <div id="pesan-mhs" class="pesan" role="alert" hidden></div>
+      <ul id="daftar-mhs" class="daftar" aria-label="Daftar mahasiswa"></ul>
+    </div>
+
+    <div id="bagian-akun" class="daftar" hidden>
+      <p class="catatan-kecil">Mengganti kata sandi atau akses membuat akun itu keluar dari panel di semua perangkat. Akun kelas yang berbagi sandi perlu diganti satu per satu dengan sandi baru yang sama.</p>
+      <div><button id="tambah-akun" class="btn-tipis" type="button">Tambah akun</button></div>
+      <div id="pesan-akun" class="pesan" role="alert" hidden></div>
+      <ul id="daftar-akun" class="daftar" aria-label="Daftar akun admin"></ul>
+    </div>
   </section>
 </main>
 
@@ -236,7 +269,41 @@ dialog p { margin: var(--space-sm) 0; }
   <form method="dialog"><button class="btn" style="width:100%">Tutup</button></form>
 </dialog>
 
-<div id="toast" class="toast" role="status" hidden><span id="toast-teks"></span><button id="toast-batal" type="button">Batalkan</button></div>
+<dialog id="dialog-mhs" aria-labelledby="judul-mhs">
+  <form id="form-mhs" class="isi-dialog" novalidate>
+    <p id="judul-mhs" class="nama">Tambah mahasiswa</p>
+    <div><label for="mhs-isi-kelas">Kelas</label><input id="mhs-isi-kelas" list="pilihan-kelas" autocomplete="off" maxlength="10"></div>
+    <div><label for="mhs-isi-nim">NIM</label><input id="mhs-isi-nim" inputmode="numeric" autocomplete="off" maxlength="16"></div>
+    <p id="mhs-catatan-nim" class="catatan-kecil" hidden>Mengubah NIM memisahkan mahasiswa ini dari riwayat presensi dan izin dengan NIM lama.</p>
+    <div><label for="mhs-isi-nama">Nama</label><input id="mhs-isi-nama" autocomplete="off" maxlength="100"></div>
+    <div><label for="mhs-isi-asal">Asal daerah</label><input id="mhs-isi-asal" autocomplete="off" maxlength="100"></div>
+    <label class="centang"><input id="mhs-isi-aktif" type="checkbox"> Aktif (ikut presensi dan rekap)</label>
+    <div id="pesan-dialog-mhs" class="pesan" role="alert" hidden></div>
+    <div class="tombol-dialog">
+      <button type="button" class="btn-tipis" data-tutup>Batal</button>
+      <button id="simpan-mhs" class="btn" type="submit">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dialog-akun" aria-labelledby="judul-akun">
+  <form id="form-akun" class="isi-dialog" novalidate>
+    <p id="judul-akun" class="nama">Tambah akun</p>
+    <div><label for="akun-isi-nama">Nama akun</label><input id="akun-isi-nama" autocomplete="off" maxlength="30" placeholder="Misalnya KELAS A"></div>
+    <div><label for="akun-isi-akses">Akses</label><input id="akun-isi-akses" list="pilihan-akses" autocomplete="off" maxlength="10"></div>
+    <p class="catatan-kecil">UTAMA: semua kelas, Pengaturan, Mahasiswa, dan Akun. SEMUA: semua kelas. Nama kelas: hanya kelas itu.</p>
+    <div><label for="akun-isi-sandi" id="label-sandi">Kata sandi</label><input id="akun-isi-sandi" type="password" autocomplete="new-password"></div>
+    <div id="pesan-dialog-akun" class="pesan" role="alert" hidden></div>
+    <div class="tombol-dialog">
+      <button type="button" class="btn-tipis" data-tutup>Batal</button>
+      <button id="simpan-akun" class="btn" type="submit">Simpan</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="pilihan-kelas"></datalist>
+<datalist id="pilihan-akses"></datalist>
+
+<div id="toast"class="toast" role="status" hidden><span id="toast-teks"></span><button id="toast-batal" type="button">Batalkan</button></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -290,6 +357,8 @@ function keLayarMasuk(pesan) {
   simpan.taruh(null);
   atur = null;
   aturBerubah = false;
+  mhsData = null;
+  akunData = null;
   pilihLayar('harian');
   $('layar-panel').hidden = true;
   $('layar-masuk').hidden = false;
@@ -651,16 +720,19 @@ function teksPilihan(k, v) {
   return TEKS_PILIHAN[v] || v;
 }
 
+const JUDUL_LAYAR = { harian: 'Presensi harian', atur: 'Pengaturan', mhs: 'Mahasiswa', akun: 'Akun admin' };
 function pilihLayar(layar) {
-  $('bagian-harian').hidden = layar !== 'harian';
-  $('bagian-atur').hidden = layar !== 'atur';
-  $('layar-harian').setAttribute('aria-pressed', String(layar === 'harian'));
-  $('layar-atur').setAttribute('aria-pressed', String(layar === 'atur'));
-  $('judul-panel').textContent = layar === 'atur' ? 'Pengaturan' : 'Presensi harian';
-  if (layar === 'atur' && !atur && admin) muatAtur();
+  for (const k in JUDUL_LAYAR) {
+    $('bagian-' + k).hidden = k !== layar;
+    $('layar-' + k).setAttribute('aria-pressed', String(k === layar));
+  }
+  $('judul-panel').textContent = JUDUL_LAYAR[layar];
+  if (!admin) return;
+  if (layar === 'atur' && !atur) muatAtur();
+  if (layar === 'mhs' && !mhsData) muatMhs();
+  if (layar === 'akun' && !akunData) muatDaftarAkun();
 }
-$('layar-harian').addEventListener('click', () => pilihLayar('harian'));
-$('layar-atur').addEventListener('click', () => pilihLayar('atur'));
+for (const k in JUDUL_LAYAR) $('layar-' + k).addEventListener('click', () => pilihLayar(k));
 
 async function muatAtur() {
   $('simpan-atur').disabled = true;
@@ -753,6 +825,184 @@ $('simpan-atur').addEventListener('click', async () => {
     $('simpan-atur').textContent = 'Simpan pengaturan';
   }
 });
+
+// Data mahasiswa dan akun admin, hanya akses UTAMA (server juga memeriksa). Setiap Simpan langsung ditulis ke Sheet.
+let mhsData = null; // [{ kelas, nim, nama, asal, aktif }]
+let akunData = null; // [{ username, akses }]
+let mhsDiubah = null; // mahasiswa yang sedang diubah di dialog, null = tambah
+
+for (const d of [$('dialog-mhs'), $('dialog-akun')]) d.querySelector('[data-tutup]').addEventListener('click', () => d.close());
+
+async function muatLayar(fn, pesan, nama, isi) {
+  tampil(pesan, `Memuat ${nama}…`, true);
+  try {
+    const r = periksa(await panggilUlang(fn, { token: admin.token }));
+    if (!r) return;
+    if (r.tolak) return tampil(pesan, r.tolak);
+    tampil(pesan, '');
+    isi(r);
+  } catch (e) {
+    tampil(pesan, `Daftar ${nama} gagal dimuat. Periksa sinyal lalu buka lagi.`);
+  }
+}
+
+async function kirimDialog(tombol, pesan, kerja) {
+  tombol.disabled = true;
+  tombol.textContent = 'Menyimpan…';
+  try {
+    const r = periksa(await kerja());
+    if (r && r.tolak) tampil(pesan, r.tolak);
+    return r && !r.tolak ? r : null;
+  } catch (e) {
+    tampil(pesan, 'Tidak tersimpan. Periksa sinyal lalu tekan Simpan lagi.');
+    return null;
+  } finally {
+    tombol.disabled = false;
+    tombol.textContent = 'Simpan';
+  }
+}
+
+function tombolAksi(teks, label, klik, kelas) {
+  const b = el('button', kelas || '', teks);
+  b.type = 'button';
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', () => klik(b));
+  return b;
+}
+
+const kelasMhs = () => [...new Set((mhsData || []).map(m => m.kelas).filter(Boolean))].sort();
+
+const muatMhs = () => muatLayar('ambilMahasiswa', $('pesan-mhs'), 'mahasiswa', isiMhs);
+function isiMhs(r) {
+  mhsData = r;
+  const kelas = kelasMhs();
+  const dipilih = $('mhs-kelas').value;
+  $('mhs-kelas').replaceChildren(new Option('Semua kelas', ''), ...kelas.map(k => new Option('Kelas ' + k, k)));
+  $('mhs-kelas').value = kelas.includes(dipilih) ? dipilih : '';
+  $('pilihan-kelas').replaceChildren(...kelas.map(k => new Option('', k)));
+  gambarMhs();
+}
+
+function gambarMhs() {
+  if (!mhsData) return;
+  const kelas = $('mhs-kelas').value;
+  const cari = $('mhs-cari').value.trim().toLowerCase();
+  const tampak = mhsData.filter(m => (!kelas || m.kelas === kelas) && (!cari || m.nama.toLowerCase().includes(cari) || m.nim.includes(cari)));
+  const aktif = tampak.filter(m => m.aktif).length;
+  $('ringkas-mhs').replaceChildren(...[['Aktif', aktif], ['Nonaktif', tampak.length - aktif]].map(([k, n]) => {
+    const li = el('li', '', k + ' ');
+    li.append(el('b', '', String(n)));
+    return li;
+  }));
+  $('daftar-mhs').replaceChildren(...(tampak.length ? tampak.map(barisMhs) : [el('li', 'kosong', 'Tidak ada mahasiswa yang cocok.')]));
+}
+$('mhs-kelas').addEventListener('change', gambarMhs);
+$('mhs-cari').addEventListener('input', gambarMhs);
+
+function barisMhs(m) {
+  const li = el('li', 'baris tanpa-foto' + (m.aktif ? '' : ' nonaktif'));
+  const isi = el('div', 'isi');
+  isi.append(el('div', 'nama', m.nama), el('div', 'ket', `${m.nim}, kelas ${m.kelas}, ${m.asal}`));
+  if (!m.aktif) {
+    const l = el('div');
+    l.append(el('span', 'lencana OK', 'Nonaktif'));
+    isi.append(l);
+  }
+  const aksi = el('div', 'aksi');
+  aksi.append(tombolAksi('Ubah', 'Ubah data ' + m.nama, () => bukaMhs(m)));
+  li.append(isi, aksi);
+  return li;
+}
+
+function bukaMhs(m) {
+  mhsDiubah = m;
+  const x = m || { kelas: $('mhs-kelas').value, nim: '', nama: '', asal: '', aktif: true };
+  $('judul-mhs').textContent = m ? 'Ubah ' + m.nama : 'Tambah mahasiswa';
+  $('mhs-isi-kelas').value = x.kelas;
+  $('mhs-isi-nim').value = x.nim;
+  $('mhs-isi-nama').value = x.nama;
+  $('mhs-isi-asal').value = x.asal;
+  $('mhs-isi-aktif').checked = x.aktif;
+  $('mhs-catatan-nim').hidden = !m;
+  tampil($('pesan-dialog-mhs'), '');
+  $('dialog-mhs').showModal();
+}
+$('tambah-mhs').addEventListener('click', () => bukaMhs(null));
+
+$('form-mhs').addEventListener('submit', async e => {
+  e.preventDefault();
+  const mahasiswa = { kelas: $('mhs-isi-kelas').value, nim: $('mhs-isi-nim').value.trim(), nama: $('mhs-isi-nama').value,
+    asal: $('mhs-isi-asal').value, aktif: $('mhs-isi-aktif').checked };
+  const r = await kirimDialog($('simpan-mhs'), $('pesan-dialog-mhs'),
+    () => panggilUlang('simpanMahasiswa', { token: admin.token, mahasiswa, nimLama: mhsDiubah ? mhsDiubah.nim : '' }));
+  if (!r) return;
+  $('dialog-mhs').close();
+  isiMhs(r);
+  beriTahu(`Data ${mahasiswa.nama.trim().toUpperCase()} tersimpan.`);
+  muatData(); // daftar "Belum presensi" ikut berubah
+});
+
+const muatDaftarAkun = () => muatLayar('ambilAkun', $('pesan-akun'), 'akun', isiAkun);
+const NAMA_AKSES = { UTAMA: 'Akses UTAMA', SEMUA: 'Semua kelas' };
+function isiAkun(r) {
+  akunData = r;
+  const akses = [...new Set(['UTAMA', 'SEMUA', ...kelasMhs(), ...r.map(a => a.akses)])];
+  $('pilihan-akses').replaceChildren(...akses.map(k => new Option('', k)));
+  $('daftar-akun').replaceChildren(...r.map(a => {
+    const li = el('li', 'baris tanpa-foto');
+    const isi = el('div', 'isi');
+    const sendiri = a.username === admin.username;
+    isi.append(el('div', 'nama', a.username + (sendiri ? ' (akun ini)' : '')), el('div', 'ket', NAMA_AKSES[a.akses] || 'Kelas ' + a.akses));
+    const aksi = el('div', 'aksi');
+    aksi.append(tombolAksi('Ubah', 'Ubah akun ' + a.username, () => bukaAkun(a)));
+    if (!sendiri) aksi.append(tombolAksi('Hapus', 'Hapus akun ' + a.username, b => hapusAkunKlik(a, b), 'tolak'));
+    li.append(isi, aksi);
+    return li;
+  }));
+}
+
+function bukaAkun(a) {
+  $('judul-akun').textContent = a ? 'Ubah ' + a.username : 'Tambah akun';
+  $('akun-isi-nama').value = a ? a.username : '';
+  $('akun-isi-nama').readOnly = !!a; // ganti nama = hapus lalu tambah, supaya catatan diverifikasi_oleh lama tetap jelas
+  $('akun-isi-akses').value = a ? a.akses : '';
+  $('akun-isi-sandi').value = '';
+  $('label-sandi').textContent = a ? 'Kata sandi baru (kosongkan jika tidak diganti)' : 'Kata sandi (minimal 8 karakter)';
+  tampil($('pesan-dialog-akun'), '');
+  $('dialog-akun').showModal();
+}
+$('tambah-akun').addEventListener('click', () => bukaAkun(null));
+
+$('form-akun').addEventListener('submit', async e => {
+  e.preventDefault();
+  const isi = { username: $('akun-isi-nama').value, akses: $('akun-isi-akses').value, sandi: $('akun-isi-sandi').value };
+  const r = await kirimDialog($('simpan-akun'), $('pesan-dialog-akun'), () => panggilUlang('simpanAkun', { token: admin.token, ...isi }));
+  if (!r) return;
+  $('dialog-akun').close();
+  $('akun-isi-sandi').value = '';
+  if (r.sesi) { // akun sendiri diubah: token lama sudah dicabut server
+    admin = r.sesi;
+    simpan.taruh(admin);
+    if (admin.akses !== 'UTAMA') { akunData = null; pilihLayar('harian'); return bukaPanel(); }
+  }
+  isiAkun(r.akun);
+  beriTahu(`Akun ${isi.username.trim().toUpperCase()} tersimpan.`);
+});
+
+async function hapusAkunKlik(a, tombol) {
+  if (!confirm(`Hapus akun ${a.username}? Akun ini langsung keluar dari panel dan tidak bisa masuk lagi.`)) return;
+  tombol.disabled = true;
+  try {
+    const r = periksa(await panggilUlang('hapusAkun', { token: admin.token, username: a.username }));
+    if (!r) return;
+    if (r.tolak) { muatDaftarAkun(); return tampil($('pesan-akun'), r.tolak); }
+    isiAkun(r);
+    beriTahu(`Akun ${a.username} dihapus.`);
+  } catch (e) {
+    tombol.disabled = false;
+    tampil($('pesan-akun'), 'Akun tidak terhapus. Periksa sinyal lalu coba lagi.');
+  }
+}
 
 if (admin) bukaPanel(); else muatAkun();
 </script>
