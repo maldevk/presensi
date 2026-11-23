@@ -109,6 +109,10 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .aksi button[aria-pressed="true"].ok { background: var(--color-mint); border-color: transparent; }
 .aksi button[aria-pressed="true"].tolak { background: var(--color-accent-3); border-color: transparent; }
 .aksi button:disabled { opacity: 0.6; cursor: wait; }
+.baris.izin .isi { gap: var(--space-xs); }
+.alasan { padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-input); background: var(--color-paper-2); overflow-wrap: anywhere; }
+.bukti { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.baris.izin input { height: 44px; font-size: var(--text-sm); }
 .kosong { padding: var(--space-lg) var(--space-md); border-radius: var(--radius-stock); background: var(--color-paper-2); color: var(--color-muted); text-align: center; }
 
 /* Foto besar */
@@ -185,6 +189,7 @@ dialog p { margin: var(--space-sm) 0; }
     <div class="pilihan" role="group" aria-label="Daftar">
       <button type="button" id="tab-hadir" aria-pressed="true">Sudah presensi</button>
       <button type="button" id="tab-belum" aria-pressed="false">Belum presensi</button>
+      <button type="button" id="tab-izin" aria-pressed="false">Izin</button>
     </div>
     <div id="pesan-panel" class="pesan" role="alert" hidden></div>
     <ul id="daftar" class="daftar" aria-label="Daftar mahasiswa"></ul>
@@ -339,14 +344,15 @@ async function muatData() {
 $('tanggal').addEventListener('change', muatData);
 $('kelas').addEventListener('change', () => gambar());
 $('cari').addEventListener('input', () => gambar());
-for (const [id, tab] of [['tab-hadir', 'hadir'], ['tab-belum', 'belum']]) {
+for (const [id, tab] of [['tab-hadir', 'hadir'], ['tab-belum', 'belum'], ['tab-izin', 'izin']]) {
   $(id).addEventListener('click', () => { pilih.tab = tab; gambar(); });
 }
 
-function cocok(x) {
+// Izin tidak terikat sesi, jadi sesi hanya disaring untuk presensi.
+function cocok(x, tanpaSesi) {
   const kelas = $('kelas').value;
   const cari = $('cari').value.trim().toLowerCase();
-  return x.sesi === pilih.sesi && (!kelas || x.kelas === kelas) &&
+  return (tanpaSesi || x.sesi === pilih.sesi) && (!kelas || x.kelas === kelas) &&
     (!cari || x.nama.toLowerCase().includes(cari) || x.nim.includes(cari));
 }
 
@@ -366,9 +372,8 @@ function gambar() {
     b.addEventListener('click', () => { pilih.sesi = s; gambar(); });
     return b;
   }));
-  $('pilih-sesi').hidden = data.sesi.length < 2;
-  $('tab-hadir').setAttribute('aria-pressed', String(pilih.tab === 'hadir'));
-  $('tab-belum').setAttribute('aria-pressed', String(pilih.tab === 'belum'));
+  for (const tab of ['hadir', 'belum', 'izin']) $('tab-' + tab).setAttribute('aria-pressed', String(pilih.tab === tab));
+  $('pilih-sesi').hidden = data.sesi.length < 2 || pilih.tab === 'izin';
 
   const hadir = data.hadir.filter(cocok);
   const belum = data.belum.filter(cocok);
@@ -387,23 +392,33 @@ function gambar() {
     return li;
   }));
 
-  const isi = pilih.tab === 'hadir' ? hadir.map(barisHadir) : belum.map(barisBelum);
-  $('daftar').replaceChildren(...(isi.length ? isi : [el('li', 'kosong',
-    pilih.tab === 'hadir' ? 'Belum ada presensi yang cocok.' : 'Semua sudah presensi atau izin.')]));
+  const isi = pilih.tab === 'hadir' ? hadir.map(barisHadir)
+    : pilih.tab === 'belum' ? belum.map(barisBelum)
+    : data.pengajuan.filter(x => cocok(x, true)).map(barisIzin);
+  const kosong = { hadir: 'Belum ada presensi yang cocok.', belum: 'Semua sudah presensi atau izin.',
+    izin: 'Tidak ada izin yang berlaku atau diajukan pada tanggal ini.' }[pilih.tab];
+  $('daftar').replaceChildren(...(isi.length ? isi : [el('li', 'kosong', kosong)]));
   for (const img of $('daftar').querySelectorAll('img[data-foto]')) pengamat.observe(img);
+}
+
+// Foto kecil yang dimuat saat terlihat; diketuk untuk melihat foto besar.
+function tombolFoto(id, label, judul, ket) {
+  const b = el('button', 'foto');
+  b.type = 'button';
+  b.setAttribute('aria-label', label);
+  const img = el('img');
+  img.alt = '';
+  img.dataset.foto = id;
+  if (fotoKecil.has(id)) img.src = fotoKecil.get(id);
+  b.append(img);
+  b.addEventListener('click', () => lihatFoto(id, judul, ket));
+  return b;
 }
 
 function barisHadir(x) {
   const li = el('li', 'baris' + (x.verifikasi === 'TOLAK' ? ' ditolak' : ''));
-  const tombolFoto = el('button', 'foto');
-  tombolFoto.type = 'button';
-  tombolFoto.setAttribute('aria-label', 'Lihat foto ' + x.nama);
-  const img = el('img');
-  img.alt = '';
-  img.dataset.foto = x.foto;
-  if (fotoKecil.has(x.foto)) img.src = fotoKecil.get(x.foto);
-  tombolFoto.append(img);
-  tombolFoto.addEventListener('click', () => lihatFoto(x));
+  const foto = tombolFoto(x.foto, 'Lihat foto ' + x.nama, x.nama,
+    `${x.nim}, kelas ${x.kelas}, sesi ${NAMA_SESI[x.sesi]} pukul ${x.jam}.`);
 
   const isi = el('div', 'isi');
   isi.append(el('div', 'nama', x.nama), el('div', 'ket', `${x.nim}, kelas ${x.kelas}, pukul ${x.jam}`));
@@ -424,7 +439,7 @@ function barisHadir(x) {
     b.addEventListener('click', () => ubah(x, x.verifikasi === nilai ? 'BELUM' : nilai));
     aksi.append(b);
   }
-  li.append(tombolFoto, isi, aksi);
+  li.append(foto, isi, aksi);
   return li;
 }
 
@@ -436,10 +451,63 @@ function barisBelum(x) {
   return li;
 }
 
-// Perubahan langsung tampil; penyimpanan berjalan di belakang, berurutan per presensi.
+const NAMA_CAKUPAN = { SEHARI: 'Sehari penuh', PAGI: 'Setengah hari Pagi', SORE: 'Setengah hari Sore' };
+function barisIzin(x) {
+  const li = el('li', 'baris tanpa-foto izin' + (x.status === 'TOLAK' ? ' ditolak' : ''));
+  const isi = el('div', 'isi');
+  const tanggal = x.mulai === x.selesai ? x.mulai : `${x.mulai} s.d. ${x.selesai}`;
+  isi.append(el('div', 'nama', x.nama), el('div', 'ket', `${x.nim}, kelas ${x.kelas}, diajukan ${x.diajukan}`),
+    el('div', '', `${x.jenis}, ${NAMA_CAKUPAN[x.cakupan] || x.cakupan}, ${tanggal}`), el('div', 'alasan', x.alasan));
+  const bukti = el('div', 'bukti');
+  x.bukti.forEach((id, i) => bukti.append(tombolFoto(id, `Lihat bukti ${i + 1} ${x.nama}`, `Bukti ${i + 1}: ${x.nama}`,
+    `${x.jenis}, ${tanggal}. ${x.alasan}`)));
+  isi.append(bukti);
+  if (x.status !== 'BELUM') {
+    const lencana = el('div');
+    lencana.append(el('span', 'lencana ' + x.status, (x.status === 'TOLAK' ? 'Ditolak' : 'Diperiksa') + ' oleh ' + x.oleh));
+    isi.append(lencana);
+  }
+  const catatan = el('input');
+  catatan.type = 'text';
+  catatan.maxLength = 300;
+  catatan.value = x.catatan;
+  catatan.placeholder = 'Catatan untuk mahasiswa (opsional)';
+  catatan.setAttribute('aria-label', 'Catatan izin ' + x.nama);
+  isi.append(catatan);
+
+  const aksi = el('div', 'aksi');
+  for (const [nilai, teks, kelas] of [['OK', 'Sah', 'ok'], ['TOLAK', 'Tolak', 'tolak']]) {
+    const b = el('button', kelas, teks);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(x.status === nilai));
+    b.setAttribute('aria-label', `${teks} izin ${x.nama}`);
+    b.addEventListener('click', () => ubahIzinKlik(x, x.status === nilai ? 'BELUM' : nilai, catatan.value.trim()));
+    aksi.append(b);
+  }
+  li.append(isi, aksi);
+  return li;
+}
+
+// Perubahan langsung tampil; penyimpanan berjalan di belakang, berurutan per baris.
 // Jika gagal, daftar dimuat ulang dari Sheet supaya layar tidak menyimpang dari data.
-const antreUbah = new Map(); // foto -> janji penyimpanan terakhir
+const antreUbah = new Map(); // kunci baris -> janji penyimpanan terakhir
 let belumTersimpan = 0;
+function simpanBelakang(kunci, nama, kerja) {
+  belumTersimpan++;
+  const simpanIni = (antreUbah.get(kunci) || Promise.resolve()).then(async () => {
+    const r = periksa(await kerja());
+    if (r && r.tolak) throw new Error(r.tolak);
+  }).catch(e => {
+    if (!admin) return; // sesi habis: sudah kembali ke layar masuk
+    beriTahu(`Perubahan ${nama} tidak tersimpan. ${e.message.startsWith('Mahasiswa') ? e.message : 'Periksa sinyal lalu coba lagi.'}`);
+    muatData();
+  }).finally(() => {
+    belumTersimpan--;
+    if (antreUbah.get(kunci) === simpanIni) antreUbah.delete(kunci);
+  });
+  antreUbah.set(kunci, simpanIni);
+}
+
 function ubah(x, nilai, diam) {
   const lama = x.verifikasi;
   x.verifikasi = nilai;
@@ -449,19 +517,20 @@ function ubah(x, nilai, diam) {
     const teks = { OK: 'ditandai sah', TOLAK: 'ditolak, tidak dihitung hadir', BELUM: 'dikembalikan ke belum diperiksa' }[nilai];
     beriTahu(`${x.nama} ${teks}.`, () => ubah(x, lama, true));
   }
-  belumTersimpan++;
-  const simpanIni = (antreUbah.get(x.foto) || Promise.resolve()).then(async () => {
-    const r = periksa(await panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
-    if (r && r.tolak) throw new Error(r.tolak);
-  }).catch(e => {
-    if (!admin) return; // sesi habis: sudah kembali ke layar masuk
-    beriTahu(`Perubahan ${x.nama} tidak tersimpan. ${e.message.startsWith('Mahasiswa') ? e.message : 'Periksa sinyal lalu coba lagi.'}`);
-    muatData();
-  }).finally(() => {
-    belumTersimpan--;
-    if (antreUbah.get(x.foto) === simpanIni) antreUbah.delete(x.foto);
-  });
-  antreUbah.set(x.foto, simpanIni);
+  simpanBelakang('p:' + x.foto, x.nama, () => panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
+}
+
+function ubahIzinKlik(x, nilai, catatan, diam) {
+  const lama = { status: x.status, catatan: x.catatan };
+  x.status = nilai;
+  x.catatan = catatan;
+  x.oleh = nilai === 'BELUM' ? '' : admin.username;
+  gambar();
+  if (!diam) {
+    const teks = { OK: 'ditandai sah', TOLAK: 'ditolak, tidak dihitung izin', BELUM: 'dikembalikan ke belum diperiksa' }[nilai];
+    beriTahu(`Izin ${x.nama} ${teks}.`, () => ubahIzinKlik(x, lama.status, lama.catatan, true));
+  }
+  simpanBelakang('i:' + x.id, x.nama, () => panggilUlang('ubahIzin', { token: admin.token, id: x.id, nilai, catatan }));
 }
 window.addEventListener('beforeunload', e => {
   if (belumTersimpan) e.preventDefault(); // peramban menampilkan peringatan bawaan
@@ -509,15 +578,15 @@ async function jalankanFoto() {
   }
 }
 
-async function lihatFoto(x) {
-  $('dialog-judul').textContent = x.nama;
-  $('dialog-ket').textContent = `${x.nim}, kelas ${x.kelas}, sesi ${NAMA_SESI[x.sesi]} pukul ${x.jam}. Memuat foto…`;
-  $('dialog-img').alt = 'Foto presensi ' + x.nama;
-  $('dialog-img').src = fotoKecil.get(x.foto) || '';
+async function lihatFoto(id, judul, ket) {
+  $('dialog-judul').textContent = judul;
+  $('dialog-ket').textContent = ket + ' Memuat foto…';
+  $('dialog-img').alt = 'Foto ' + judul;
+  $('dialog-img').src = fotoKecil.get(id) || '';
   $('dialog-foto').showModal();
   try {
-    $('dialog-img').src = await ambilFoto(x.foto, true);
-    $('dialog-ket').textContent = `${x.nim}, kelas ${x.kelas}, sesi ${NAMA_SESI[x.sesi]} pukul ${x.jam}.`;
+    $('dialog-img').src = await ambilFoto(id, true);
+    $('dialog-ket').textContent = ket;
   } catch (e) {
     $('dialog-ket').textContent = 'Foto gagal dimuat. Tutup lalu coba lagi.';
   }
