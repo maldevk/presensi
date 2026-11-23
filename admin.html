@@ -78,13 +78,29 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .saring { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
 .saring .lebar { grid-column: 1 / -1; }
 
-.pilihan { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs); border-radius: var(--radius-input); background: var(--color-paper-2); }
-.pilihan button { position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; transition: color var(--dur-micro) ease; }
+.pilihan {
+  position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
+  border-radius: var(--radius-input); background: var(--color-paper-2);
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.pilihan button { position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; transition: scale var(--dur-micro) var(--ease-snap); }
 .pilihan button[aria-pressed="true"] { color: var(--color-ink); }
-/* Jempol karet: tepinya digerakkan oleh karet() di skrip. Pseudo-elemen agar tetap ada saat tombol dibuat ulang. */
+.pilihan button[aria-pressed="false"]:active { scale: 0.96; }
+.pilihan[data-seret] button[aria-pressed="true"] { cursor: grab; }
+.pilihan[data-pegang], .pilihan[data-pegang] button { cursor: grabbing; }
+/* Jempol karet: tepinya (--l --t --r --b) digerakkan oleh karet() di skrip. Pseudo-elemen agar tetap ada saat tombol dibuat ulang. */
 .pilihan[data-jempol]::before {
   content: ""; position: absolute; left: var(--l); top: var(--t); width: calc(var(--r) - var(--l)); height: calc(var(--b) - var(--t));
   border-radius: 10px; background: var(--color-card); box-shadow: var(--shadow-card);
+}
+/* Huruf yang tertutup jempol berwarna tinta, juga saat jempol baru separuh jalan: lapisan gradien seukuran jempol dipotong ke huruf. */
+.pilihan[data-jempol] button {
+  --redup: var(--color-muted);
+  background:
+    linear-gradient(90deg, transparent calc(var(--l) - var(--x)), var(--color-ink) 0 calc(var(--r) - var(--x)), transparent 0)
+      0 calc(var(--t) - var(--y)) / 100% calc(var(--b) - var(--t)) no-repeat,
+    var(--redup);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
 .ringkas { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
@@ -150,7 +166,8 @@ dialog p { margin: var(--space-sm) 0; }
 .toast button { min-height: 36px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
 
 @media (hover: hover) {
-  .pilihan button[aria-pressed="false"]:hover, .aksi button:not(:disabled):hover, .btn-tipis:hover { background: var(--color-paper-2); color: var(--color-ink); }
+  .aksi button:not(:disabled):hover, .btn-tipis:hover { background: var(--color-paper-2); color: var(--color-ink); }
+  .pilihan button[aria-pressed="false"]:hover { --redup: var(--color-ink); }
 }
 @media (min-width: 40rem) {
   .saring { grid-template-columns: 10rem 10rem minmax(0, 1fr); }
@@ -164,8 +181,9 @@ dialog p { margin: var(--space-sm) 0; }
   #pilih-layar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .btn { transition: none; }
+  .btn, .pilihan button { transition: none; }
   .btn:active { translate: none; }
+  .pilihan button[aria-pressed="false"]:active { scale: none; }
 }
 </style>
 </head>
@@ -1009,41 +1027,144 @@ async function hapusAkunKlik(a, tombol) {
   }
 }
 
-// Jempol karet untuk .pilihan, port dari RubberSegment (React Bits): tepi depan melesat ke tujuan,
-// tepi belakang menyusul dan memampat 3px lalu kembali. Mengikuti aria-pressed, jadi kode lain tidak berubah.
+// Jempol karet untuk .pilihan, port lengkap RubberSegment (React Bits). Saat pindah, jempol meregang menutup
+// kedua tab lalu mendarat dengan pegas; tepi belakang memampat 3px dan kembali. Jempol bisa diseret (ditahan
+// karet di ujung) dan dilempar. Tab tetap dipilih lewat klik tombolnya, jadi handler yang ada tidak berubah.
 const geraknyaDikurangi = matchMedia('(prefers-reduced-motion: reduce)');
 const lunak = p => 1 - (1 - Math.min(1, p)) ** 4;
+// Pegas seperti di Motion: durasi visual (detik) dan pantulan 0..1 menjadi kekakuan dan redaman, massa 1.
+const pegas = (durasi, pantul = 0) => { const k = (2 * Math.PI / (durasi * 1.2)) ** 2; return { k, c: 2 * (1 - pantul) * Math.sqrt(k) }; };
+const PEGAS_UI = pegas(0.3), PEGAS_LEMPAR = pegas(0.4, 0.2), PEGAS_LEPAS = pegas(0.16);
+const batas = (n, a, b) => Math.min(b, Math.max(a, n));
+const tahanKaret = (lewat, w) => (lewat * w * 0.55) / (w + 0.55 * Math.abs(lewat));
+const proyeksi = v => { const d = 1 - 0.1 * 0.05 ** 0.75; return (v / 1000) * d / (1 - d); }; // glide 75
+const kecepatan = (riwayat, kini) => {
+  const r = riwayat.filter(([t]) => kini - t <= 100);
+  if (r.length < 2) return 0;
+  const [[t0, x0], [t1, x1]] = [r[0], r[r.length - 1]];
+  return t1 - t0 >= 8 ? (x1 - x0) / (t1 - t0) * 1000 : 0;
+};
+const sama = (a, b) => !!a && !!b && a.every((n, i) => n === b[i]);
+
 function karet(g) {
-  let kini = null, bingkai = 0;
-  const pasang = e => { kini = e; ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, e[i] + 'px')); };
-  const ukur = () => {
-    const b = g.querySelector('[aria-pressed="true"]');
-    return b && b.offsetWidth ? [b.offsetLeft, b.offsetTop, b.offsetLeft + b.offsetWidth, b.offsetTop + b.offsetHeight] : null;
+  const x = [0, 0, 0, 0], v = [0, 0, 0, 0], motor = [null, null, null, null]; // tepi kiri, atas, kanan, bawah
+  let slot = [], sasaran = null, bingkai = 0, lalu = 0, serah = 0, seret = null;
+  const tombol = () => [...g.querySelectorAll('button')];
+  const tulis = () => ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, x[i] + 'px'));
+  const jalan = now => {
+    const dt = Math.min(0.05, (now - lalu) / 1000);
+    lalu = now;
+    motor.forEach((m, i) => {
+      if (!m) return;
+      if (m.lama) { // tween regang
+        const awal = x[i], p = (now - m.mulai) / m.lama;
+        x[i] = m.dari + (m.ke - m.dari) * lunak(p);
+        v[i] = dt ? (x[i] - awal) / dt : 0;
+        if (p >= 1) motor[i] = null;
+        return;
+      }
+      for (let sisa = dt; sisa > 0; sisa -= 0.004) { // langkah kecil agar pegas kaku tetap stabil
+        const h = Math.min(0.004, sisa);
+        v[i] += (-m.k * (x[i] - m.ke) - m.c * v[i]) * h;
+        x[i] += v[i] * h;
+      }
+      if (Math.abs(x[i] - m.ke) < 0.1 && Math.abs(v[i]) < 5) { x[i] = m.ke; v[i] = 0; motor[i] = null; if (m.lalu) m.lalu(); }
+    });
+    tulis();
+    bingkai = motor.some(Boolean) ? requestAnimationFrame(jalan) : 0;
   };
-  const segarkan = lompat => {
-    const tuju = ukur();
+  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = performance.now(); bingkai = requestAnimationFrame(jalan); } };
+  const henti = () => { clearTimeout(serah); motor.fill(null); v.fill(0); };
+  const lompat = tuju => { henti(); sasaran = tuju; x.splice(0, 4, ...tuju); tulis(); };
+  // Tepi depan melesat ke tujuan; tepi belakang menyusul, memampat bila diminta, lalu kembali.
+  const darat = (tuju, kec, lempar, pampat) => {
+    clearTimeout(serah);
+    sasaran = tuju;
+    for (const [a, b] of [[0, 2], [1, 3]]) {
+      const geser = tuju[a] + tuju[b] - x[a] - x[b], d = Math.sign(geser) || 1;
+      const [depan, belakang] = d > 0 ? [b, a] : [a, b];
+      if (kec !== null && a === 0) v[a] = v[b] = batas(kec, -2000, 2000);
+      gerak(depan, { ...(lempar ? PEGAS_LEMPAR : PEGAS_UI), ke: tuju[depan] });
+      const p = pampat && Math.abs(geser) > 1 ? d * 3 : 0;
+      gerak(belakang, { ...PEGAS_UI, ke: tuju[belakang] + p, lalu: p ? () => gerak(belakang, { ...PEGAS_LEPAS, ke: tuju[belakang] }) : null });
+    }
+  };
+  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms kemudian.
+  const pindah = tuju => {
+    clearTimeout(serah);
+    sasaran = tuju;
+    const mulai = performance.now();
+    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai, lama: 190 }));
+    serah = setTimeout(() => darat(tuju, null, false, true), 150);
+  };
+  const segarkan = paksa => {
+    const semua = tombol();
+    slot = semua.map(b => {
+      b.style.setProperty('--x', b.offsetLeft + 'px');
+      b.style.setProperty('--y', b.offsetTop + 'px');
+      return [b.offsetLeft, b.offsetTop, b.offsetLeft + b.offsetWidth, b.offsetTop + b.offsetHeight];
+    });
+    const i = semua.findIndex(b => b.getAttribute('aria-pressed') === 'true');
+    const tuju = i >= 0 && semua[i].offsetWidth ? slot[i] : null;
+    const tadi = g.hasAttribute('data-jempol');
     g.toggleAttribute('data-jempol', !!tuju);
-    if (!tuju) { cancelAnimationFrame(bingkai); kini = null; return; }
-    if (kini && tuju.every((v, i) => v === kini[i])) return;
-    cancelAnimationFrame(bingkai);
-    if (lompat || !kini || geraknyaDikurangi.matches) return pasang(tuju);
-    const dari = kini, mulai = performance.now();
-    const arah = [Math.sign(tuju[0] + tuju[2] - dari[0] - dari[2]), Math.sign(tuju[1] + tuju[3] - dari[1] - dari[3])];
-    const gabung = [Math.min(dari[0], tuju[0]), Math.min(dari[1], tuju[1]), Math.max(dari[2], tuju[2]), Math.max(dari[3], tuju[3])];
-    const langkah = now => {
-      const t = now - mulai;
-      pasang(tuju.map((v, i) => {
-        const d = arah[i % 2];
-        const regang = x => dari[i] + (gabung[i] - dari[i]) * lunak(x / 190);
-        if (t < 150) return regang(t);
-        // Tepi kiri/atas tertinggal saat bergerak ke kanan/bawah, dan sebaliknya.
-        const s = regang(150), u = t - 150, pampat = (i < 2 ? d > 0 : d < 0) ? v + d * 3 : v;
-        return u < 300 ? s + (pampat - s) * lunak(u / 300) : pampat + (v - pampat) * lunak((u - 300) / 160);
-      }));
-      if (t < 610) bingkai = requestAnimationFrame(langkah);
-    };
-    bingkai = requestAnimationFrame(langkah);
+    // Seret hanya bila semua tab sebaris (di layar sempit, Halaman panel menjadi 2×2).
+    g.toggleAttribute('data-seret', !!tuju && slot.every(s => s[1] === slot[0][1]));
+    if (!tuju) return henti();
+    if (seret || (!paksa && sama(tuju, sasaran))) return;
+    if (paksa || !tadi || geraknyaDikurangi.matches) lompat(tuju); else pindah(tuju);
   };
+
+  const posisi = e => e.clientX - g.getBoundingClientRect().left;
+  g.addEventListener('pointerdown', e => {
+    const px = posisi(e);
+    if (seret || e.button !== 0 || !g.hasAttribute('data-seret') || px < x[0] || px > x[2]) return;
+    henti();
+    seret = { id: e.pointerId, x0: px, hidup: false, riwayat: [[e.timeStamp, px]] };
+    try { g.setPointerCapture(e.pointerId); } catch {}
+  });
+  g.addEventListener('pointermove', e => {
+    const s = seret;
+    if (!s || e.pointerId !== s.id) return;
+    const px = posisi(e);
+    s.riwayat.push([e.timeStamp, px]);
+    if (s.riwayat.length > 8) s.riwayat.shift();
+    if (!s.hidup) {
+      if (Math.abs(px - s.x0) < 4) return;
+      Object.assign(s, { hidup: true, geser: px - x[0], w: x[2] - x[0] });
+      g.toggleAttribute('data-pegang', true);
+    }
+    const kiri = slot[0][0], kanan = slot[slot.length - 1][2], l = px - s.geser, maks = kanan - s.w;
+    if (l < kiri) { x[0] = kiri; x[2] = kiri + s.w - tahanKaret(kiri - l, s.w); }
+    else if (l > maks) { x[2] = kanan; x[0] = maks + tahanKaret(l - maks, s.w); }
+    else { x[0] = l; x[2] = l + s.w; }
+    tulis();
+  });
+  const lepas = e => {
+    const s = seret;
+    if (!s || e.pointerId !== s.id) return;
+    seret = null;
+    g.removeAttribute('data-pegang');
+    if (!s.hidup || e.type !== 'pointerup') return darat(sasaran, null, false, false);
+    const kec = kecepatan(s.riwayat, e.timeStamp), lempar = Math.abs(kec) > 110;
+    const asal = slot.findIndex(t => sama(t, sasaran)), tengah = (x[0] + x[2]) / 2 + proyeksi(kec);
+    const jarak = t => Math.abs((t[0] + t[2]) / 2 - tengah);
+    let ke = slot.reduce((terbaik, t, i) => jarak(t) < jarak(slot[terbaik]) ? i : terbaik, 0);
+    if (lempar && ke === asal) ke = batas(ke + Math.sign(kec), 0, slot.length - 1);
+    if (geraknyaDikurangi.matches) lompat(slot[ke]); else darat(slot[ke], kec, lempar, lempar);
+    // Handler klik yang memilih tab; segarkan() mengembalikan jempol bila pilihan ternyata tidak berubah.
+    if (ke !== asal) { tombol()[ke].click(); segarkan(); }
+  };
+  for (const jenis of ['pointerup', 'pointercancel', 'lostpointercapture']) g.addEventListener(jenis, lepas);
+  g.addEventListener('keydown', e => {
+    const semua = tombol(), i = semua.indexOf(document.activeElement);
+    const ke = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: semua.length - 1 }[e.key];
+    if (i < 0 || !semua[ke]) return;
+    e.preventDefault();
+    semua[ke].click();
+    tombol()[ke].focus(); // tombol Sesi dibuat ulang saat diklik
+  });
+
   new MutationObserver(() => segarkan()).observe(g, { subtree: true, childList: true, attributeFilter: ['aria-pressed'] });
   new ResizeObserver(() => segarkan(true)).observe(g);
 }
