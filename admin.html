@@ -481,9 +481,9 @@ function gambar() {
   for (const tab of ['hadir', 'belum', 'izin']) $('tab-' + tab).setAttribute('aria-pressed', String(pilih.tab === tab));
   $('pilih-sesi').hidden = data.sesi.length < 2 || pilih.tab === 'izin';
 
-  const hadir = data.hadir.filter(cocok);
-  const belum = data.belum.filter(cocok);
-  const izin = data.izin.filter(cocok);
+  const hadir = data.hadir.filter(x => cocok(x));
+  const belum = data.belum.filter(x => cocok(x));
+  const izin = data.izin.filter(x => cocok(x));
   const hitung = (daftar, f) => daftar.filter(f).length;
   const angka = [
     ['Hadir', hitung(hadir, x => x.status === 'HADIR' && x.verifikasi !== 'TOLAK')],
