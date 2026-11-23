@@ -195,6 +195,7 @@ dialog p { margin: var(--space-sm) 0; }
 }
 @media (min-width: 40rem) {
   .saring { grid-template-columns: 10rem 10rem minmax(0, 1fr); }
+  .saring.dua { grid-template-columns: 10rem minmax(0, 1fr); } /* saringan dengan dua isian: Cari mengisi sisa lebar */
   .saring .lebar { grid-column: auto; }
   .baris { grid-template-columns: 4rem minmax(0, 1fr) auto; }
   .aksi { grid-column: auto; grid-template-columns: 6rem 6rem; }
@@ -308,7 +309,7 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
     </div>
 
     <div id="bagian-mhs" class="daftar" hidden>
-      <div class="saring" role="group" aria-label="Saring mahasiswa">
+      <div class="saring dua" role="group" aria-label="Saring mahasiswa">
         <div>
           <label for="mhs-kelas">Kelas</label>
           <select id="mhs-kelas"><option value="">Semua kelas</option></select>
