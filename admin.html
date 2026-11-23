@@ -115,6 +115,15 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .baris.izin input { height: 44px; font-size: var(--text-sm); }
 .kosong { padding: var(--space-lg) var(--space-md); border-radius: var(--radius-stock); background: var(--color-paper-2); color: var(--color-muted); text-align: center; }
 
+/* Pengaturan (akses UTAMA) */
+fieldset { margin: 0; padding: var(--space-lg) var(--space-md); border: 0; display: grid; gap: var(--space-sm); min-width: 0; }
+legend { float: left; width: 100%; margin-bottom: var(--space-xs); padding: 0; font-size: var(--text-lg); font-weight: 600; }
+.isian { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
+.catatan-kecil { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+.libur { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); align-items: center; }
+.libur .lebar { grid-column: 1 / -1; }
+.simpan-atur { display: grid; gap: var(--space-sm); }
+
 /* Foto besar */
 dialog { width: min(32rem, calc(100vw - 2 * var(--space-md))); padding: var(--space-md); border: 0; border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); }
 dialog::backdrop { background: oklch(20% 0.014 255 / 0.5); }
@@ -138,6 +147,9 @@ dialog p { margin: var(--space-sm) 0; }
   .baris { grid-template-columns: 4rem minmax(0, 1fr) auto; }
   .aksi { grid-column: auto; grid-template-columns: 6rem 6rem; }
   .baris.tanpa-foto { grid-template-columns: minmax(0, 1fr) auto; }
+  .isian { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .libur { grid-template-columns: 11rem minmax(0, 1fr) auto; }
+  .libur .lebar { grid-column: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }
@@ -168,6 +180,12 @@ dialog p { margin: var(--space-sm) 0; }
       <h1 id="judul-panel">Presensi harian</h1>
       <div class="akun">Masuk sebagai <strong id="nama-akun"></strong> <button id="keluar" class="btn-tipis" type="button">Keluar</button></div>
     </div>
+    <div id="pilih-layar" class="pilihan" role="group" aria-label="Halaman panel" hidden>
+      <button type="button" id="layar-harian" aria-pressed="true">Presensi harian</button>
+      <button type="button" id="layar-atur" aria-pressed="false">Pengaturan</button>
+    </div>
+
+    <div id="bagian-harian">
 
     <div class="saring" role="group" aria-label="Saring daftar">
       <div>
@@ -193,6 +211,21 @@ dialog p { margin: var(--space-sm) 0; }
     </div>
     <div id="pesan-panel" class="pesan" role="alert" hidden></div>
     <ul id="daftar" class="daftar" aria-label="Daftar mahasiswa"></ul>
+    </div>
+
+    <div id="bagian-atur" class="daftar" hidden>
+      <div id="atur-isi" class="daftar"></div>
+      <fieldset class="kartu" id="kartu-libur" hidden>
+        <legend>Tanggal libur</legend>
+        <p class="catatan-kecil">Presensi tutup dan tidak dihitung alfa pada tanggal ini. Sabtu dan Minggu tidak perlu dicatat jika bukan hari kuliah.</p>
+        <ul id="daftar-libur" class="daftar"></ul>
+        <div><button id="tambah-libur" class="btn-tipis" type="button">Tambah tanggal libur</button></div>
+      </fieldset>
+      <div class="simpan-atur">
+        <div id="pesan-atur" class="pesan" role="alert" hidden></div>
+        <button id="simpan-atur" class="btn" type="button" disabled>Simpan pengaturan</button>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -255,6 +288,9 @@ function tampil(el, teks, tenang) {
 function keLayarMasuk(pesan) {
   admin = null;
   simpan.taruh(null);
+  atur = null;
+  aturBerubah = false;
+  pilihLayar('harian');
   $('layar-panel').hidden = true;
   $('layar-masuk').hidden = false;
   tampil($('pesan-masuk'), pesan);
@@ -316,6 +352,7 @@ function bukaPanel() {
   $('layar-masuk').hidden = true;
   $('layar-panel').hidden = false;
   $('nama-akun').textContent = admin.username;
+  $('pilih-layar').hidden = admin.akses !== 'UTAMA';
   if (!$('tanggal').value) $('tanggal').value = hariIni();
   muatData();
 }
@@ -533,7 +570,7 @@ function ubahIzinKlik(x, nilai, catatan, diam) {
   simpanBelakang('i:' + x.id, x.nama, () => panggilUlang('ubahIzin', { token: admin.token, id: x.id, nilai, catatan }));
 }
 window.addEventListener('beforeunload', e => {
-  if (belumTersimpan) e.preventDefault(); // peramban menampilkan peringatan bawaan
+  if (belumTersimpan || aturBerubah) e.preventDefault(); // peramban menampilkan peringatan bawaan
 });
 
 let jamToast = 0;
@@ -591,6 +628,131 @@ async function lihatFoto(id, judul, ket) {
     $('dialog-ket').textContent = 'Foto gagal dimuat. Tutup lalu coba lagi.';
   }
 }
+
+// Pengaturan dan libur, hanya akses UTAMA (server juga memeriksa).
+let atur = null; // { nilai, pilihan, libur } dari server
+let aturBerubah = false;
+const KELOMPOK_ATUR = [
+  ['Sesi Pagi', ['PAGI_AKTIF', 'PAGI_PAKAI_BATAS', 'PAGI_BUKA', 'PAGI_TEPAT', 'PAGI_TUTUP']],
+  ['Sesi Sore', ['SORE_AKTIF', 'SORE_PAKAI_BATAS', 'SORE_BUKA', 'SORE_TEPAT', 'SORE_TUTUP']],
+  ['Umum', ['MODE', 'HARI_KULIAH', 'IZIN_MAKS_HARI', 'IZIN_BATAS_SUSULAN_HARI']],
+];
+const LABEL_ATUR = {
+  AKTIF: 'Sesi aktif', PAKAI_BATAS: 'Pakai batas waktu', BUKA: 'Mulai menerima', TEPAT: 'Batas hadir', TUTUP: 'Batas terlambat',
+  MODE: 'Mode presensi', HARI_KULIAH: 'Hari kuliah', IZIN_MAKS_HARI: 'Izin terpanjang', IZIN_BATAS_SUSULAN_HARI: 'Izin susulan paling lambat',
+};
+const TEKS_PILIHAN = {
+  YA: 'Ya', TIDAK: 'Tidak', OTOMATIS: 'Otomatis, ikut jam', BUKA: 'Buka terus (darurat)', TUTUP: 'Tutup (darurat)',
+  '1,2,3,4,5': 'Senin sampai Jumat', '1,2,3,4,5,6': 'Senin sampai Sabtu',
+};
+function teksPilihan(k, v) {
+  if (k === 'IZIN_MAKS_HARI') return v + ' hari';
+  if (k === 'IZIN_BATAS_SUSULAN_HARI') return v === '0' ? 'Hari H' : `H+${v}`;
+  return TEKS_PILIHAN[v] || v;
+}
+
+function pilihLayar(layar) {
+  $('bagian-harian').hidden = layar !== 'harian';
+  $('bagian-atur').hidden = layar !== 'atur';
+  $('layar-harian').setAttribute('aria-pressed', String(layar === 'harian'));
+  $('layar-atur').setAttribute('aria-pressed', String(layar === 'atur'));
+  $('judul-panel').textContent = layar === 'atur' ? 'Pengaturan' : 'Presensi harian';
+  if (layar === 'atur' && !atur && admin) muatAtur();
+}
+$('layar-harian').addEventListener('click', () => pilihLayar('harian'));
+$('layar-atur').addEventListener('click', () => pilihLayar('atur'));
+
+async function muatAtur() {
+  $('simpan-atur').disabled = true;
+  tampil($('pesan-atur'), 'Memuat pengaturan…', true);
+  try {
+    const r = periksa(await panggilUlang('ambilPengaturan', { token: admin.token }));
+    if (!r) return;
+    if (r.tolak) return tampil($('pesan-atur'), r.tolak);
+    isiAtur(r);
+    tampil($('pesan-atur'), '');
+  } catch (e) {
+    tampil($('pesan-atur'), 'Pengaturan gagal dimuat. Periksa sinyal lalu buka Pengaturan lagi.');
+  }
+}
+
+function isiAtur(r) {
+  atur = r;
+  aturBerubah = false;
+  $('atur-isi').replaceChildren(...KELOMPOK_ATUR.map(([judul, kunci]) => {
+    const f = el('fieldset', 'kartu');
+    f.append(el('legend', '', judul));
+    const isian = el('div', 'isian');
+    for (const k of kunci) {
+      const s = el('select');
+      s.id = 'atur-' + k;
+      const pilihan = r.pilihan[k].includes(r.nilai[k]) ? r.pilihan[k] : [r.nilai[k], ...r.pilihan[k]];
+      s.append(...pilihan.map(v => new Option(teksPilihan(k, v), v)));
+      s.value = r.nilai[k];
+      const l = el('label', '', LABEL_ATUR[k] || LABEL_ATUR[k.slice(5)]);
+      l.htmlFor = s.id;
+      const d = el('div');
+      d.append(l, s);
+      isian.append(d);
+    }
+    f.append(isian);
+    if (judul !== 'Umum') f.append(el('p', 'catatan-kecil', 'Tanpa batas waktu: sesi buka sampai sesi berikutnya dibuka, dan semua kiriman dihitung hadir.'));
+    return f;
+  }));
+  $('daftar-libur').replaceChildren(...r.libur.map(barisLibur));
+  $('kartu-libur').hidden = false;
+  $('simpan-atur').disabled = false;
+}
+
+function barisLibur(x) {
+  const li = el('li', 'libur');
+  const tanggal = el('input');
+  tanggal.type = 'date';
+  tanggal.value = x.tanggal; // tanggal salah tulis di Sheet tampil kosong, lalu Simpan menolaknya
+  tanggal.setAttribute('aria-label', 'Tanggal libur');
+  const ket = el('input', 'lebar');
+  ket.type = 'text';
+  ket.maxLength = 100;
+  ket.value = x.keterangan;
+  ket.placeholder = 'Keterangan, misalnya Natal';
+  ket.setAttribute('aria-label', 'Keterangan libur');
+  const hapus = el('button', 'btn-tipis', 'Hapus');
+  hapus.type = 'button';
+  hapus.addEventListener('click', () => { li.remove(); aturBerubah = true; });
+  li.append(tanggal, ket, hapus);
+  return li;
+}
+
+$('tambah-libur').addEventListener('click', () => {
+  const li = barisLibur({ tanggal: '', keterangan: '' });
+  $('daftar-libur').append(li);
+  li.querySelector('input').focus();
+  aturBerubah = true;
+});
+$('bagian-atur').addEventListener('input', () => { aturBerubah = true; });
+
+$('simpan-atur').addEventListener('click', async () => {
+  const nilai = { ...atur.nilai }; // kunci yang tidak ditampilkan (SIMPAN_FOTO_HARI) dikirim apa adanya
+  for (const [, kunci] of KELOMPOK_ATUR) for (const k of kunci) nilai[k] = $('atur-' + k).value;
+  const libur = [...$('daftar-libur').children]
+    .map(li => ({ tanggal: li.querySelector('[type="date"]').value, keterangan: li.querySelector('[type="text"]').value.trim() }))
+    .filter(x => x.tanggal || x.keterangan);
+  $('simpan-atur').disabled = true;
+  $('simpan-atur').textContent = 'Menyimpan…';
+  try {
+    const r = periksa(await panggilUlang('simpanPengaturan', { token: admin.token, nilai, libur }));
+    if (!r) return;
+    if (r.tolak) return tampil($('pesan-atur'), r.tolak);
+    isiAtur(r);
+    tampil($('pesan-atur'), 'Tersimpan dan langsung berlaku untuk halaman presensi.', true);
+    muatData(); // libur dan jam sesi mengubah daftar "Belum presensi"
+  } catch (e) {
+    tampil($('pesan-atur'), 'Tidak tersimpan. Periksa sinyal lalu tekan Simpan lagi.');
+  } finally {
+    $('simpan-atur').disabled = !atur;
+    $('simpan-atur').textContent = 'Simpan pengaturan';
+  }
+});
 
 if (admin) bukaPanel(); else muatAkun();
 </script>
