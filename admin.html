@@ -78,9 +78,14 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .saring { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
 .saring .lebar { grid-column: 1 / -1; }
 
-.pilihan { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs); border-radius: var(--radius-input); background: var(--color-paper-2); }
-.pilihan button { min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; }
-.pilihan button[aria-pressed="true"] { background: var(--color-card); color: var(--color-ink); box-shadow: var(--shadow-card); }
+.pilihan { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs); border-radius: var(--radius-input); background: var(--color-paper-2); }
+.pilihan button { position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; transition: color var(--dur-micro) ease; }
+.pilihan button[aria-pressed="true"] { color: var(--color-ink); }
+/* Jempol karet: tepinya digerakkan oleh karet() di skrip. Pseudo-elemen agar tetap ada saat tombol dibuat ulang. */
+.pilihan[data-jempol]::before {
+  content: ""; position: absolute; left: var(--l); top: var(--t); width: calc(var(--r) - var(--l)); height: calc(var(--b) - var(--t));
+  border-radius: 10px; background: var(--color-card); box-shadow: var(--shadow-card);
+}
 
 .ringkas { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
 .ringkas li { padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-pill); background: var(--color-paper-2); font-size: var(--text-sm); }
@@ -1003,6 +1008,46 @@ async function hapusAkunKlik(a, tombol) {
     tampil($('pesan-akun'), 'Akun tidak terhapus. Periksa sinyal lalu coba lagi.');
   }
 }
+
+// Jempol karet untuk .pilihan, port dari RubberSegment (React Bits): tepi depan melesat ke tujuan,
+// tepi belakang menyusul dan memampat 3px lalu kembali. Mengikuti aria-pressed, jadi kode lain tidak berubah.
+const geraknyaDikurangi = matchMedia('(prefers-reduced-motion: reduce)');
+const lunak = p => 1 - (1 - Math.min(1, p)) ** 4;
+function karet(g) {
+  let kini = null, bingkai = 0;
+  const pasang = e => { kini = e; ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, e[i] + 'px')); };
+  const ukur = () => {
+    const b = g.querySelector('[aria-pressed="true"]');
+    return b && b.offsetWidth ? [b.offsetLeft, b.offsetTop, b.offsetLeft + b.offsetWidth, b.offsetTop + b.offsetHeight] : null;
+  };
+  const segarkan = lompat => {
+    const tuju = ukur();
+    g.toggleAttribute('data-jempol', !!tuju);
+    if (!tuju) { cancelAnimationFrame(bingkai); kini = null; return; }
+    if (kini && tuju.every((v, i) => v === kini[i])) return;
+    cancelAnimationFrame(bingkai);
+    if (lompat || !kini || geraknyaDikurangi.matches) return pasang(tuju);
+    const dari = kini, mulai = performance.now();
+    const arah = [Math.sign(tuju[0] + tuju[2] - dari[0] - dari[2]), Math.sign(tuju[1] + tuju[3] - dari[1] - dari[3])];
+    const gabung = [Math.min(dari[0], tuju[0]), Math.min(dari[1], tuju[1]), Math.max(dari[2], tuju[2]), Math.max(dari[3], tuju[3])];
+    const langkah = now => {
+      const t = now - mulai;
+      pasang(tuju.map((v, i) => {
+        const d = arah[i % 2];
+        const regang = x => dari[i] + (gabung[i] - dari[i]) * lunak(x / 190);
+        if (t < 150) return regang(t);
+        // Tepi kiri/atas tertinggal saat bergerak ke kanan/bawah, dan sebaliknya.
+        const s = regang(150), u = t - 150, pampat = (i < 2 ? d > 0 : d < 0) ? v + d * 3 : v;
+        return u < 300 ? s + (pampat - s) * lunak(u / 300) : pampat + (v - pampat) * lunak((u - 300) / 160);
+      }));
+      if (t < 610) bingkai = requestAnimationFrame(langkah);
+    };
+    bingkai = requestAnimationFrame(langkah);
+  };
+  new MutationObserver(() => segarkan()).observe(g, { subtree: true, childList: true, attributeFilter: ['aria-pressed'] });
+  new ResizeObserver(() => segarkan(true)).observe(g);
+}
+document.querySelectorAll('.pilihan').forEach(karet);
 
 if (admin) bukaPanel(); else muatAkun();
 </script>
