@@ -32,6 +32,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: clip; }
+/* Ruang scrollbar selalu disediakan: tanpa ini, pindah tab yang mengubah tinggi halaman menggeser lebar dan jempol tab melompat. */
+html { scrollbar-gutter: stable; }
 body {
   margin: 0; min-height: 100dvh; background: var(--color-paper); color: var(--color-ink);
   font-family: var(--font-body); font-size: var(--text-md); font-weight: 500; line-height: 1.45;
@@ -158,6 +160,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .aksi button[aria-pressed="true"].ok { background: var(--color-mint); border-color: transparent; }
 .aksi button[aria-pressed="true"].tolak { background: var(--color-accent-3); border-color: transparent; }
 .aksi button:disabled { opacity: 0.6; cursor: wait; }
+.aksi button, .btn-tipis { transition: scale var(--dur-micro) var(--ease-snap); }
+.aksi button:not(:disabled):active, .btn-tipis:not(:disabled):active { scale: 0.96; }
 .baris.izin .isi { gap: var(--space-xs); }
 .alasan { padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-input); background: var(--color-paper-2); overflow-wrap: anywhere; }
 .bukti { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
@@ -231,7 +235,8 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
   .kerangka span { animation: none; }
   .btn, .pilihan button { transition: none; }
   .btn:active { translate: none; }
-  .pilihan button[aria-pressed="false"]:active { scale: none; }
+  .pilihan button[aria-pressed="false"]:active, .aksi button:active, .btn-tipis:active { scale: none; }
+  .aksi button, .btn-tipis { transition: none; }
 }
 </style>
 </head>
@@ -603,11 +608,7 @@ async function muatData(senyap = false) {
       $('kelas').value = kelasAda.includes(kelas) ? kelas : '';
     }
     tampil($('pesan-panel'), data.sesi.length ? '' : 'Tidak ada sesi kuliah pada tanggal ini, atau sesinya belum dibuka.', true);
-    // Fokus keyboard di daftar dikembalikan ke tombol yang sama sesudah daftar digambar ulang.
-    const aktif = document.activeElement;
-    const fokus = $('daftar').contains(aktif) && aktif.getAttribute('aria-label');
     gambar(senyap);
-    if (fokus) { const b = $('daftar').querySelector(`[aria-label="${CSS.escape(fokus)}"]`); if (b) b.focus({ preventScroll: true }); }
     tandaiPerbarui(true);
   } catch (e) {
     if (urut !== urutMuat) return;
@@ -721,7 +722,11 @@ function gambar(tandaiBaru) {
   const kosong = { hadir: 'Belum ada presensi yang cocok.', belum: 'Semua sudah presensi atau izin.',
     izin: 'Tidak ada izin yang berlaku atau diajukan pada tanggal ini.' }[pilih.tab];
   const lama = new Set([...$('daftar').children].map(c => c.dataset.kunci));
+  // Fokus keyboard di daftar dikembalikan ke tombol yang sama sesudah digambar ulang (Sah/Tolak, Batalkan, perbarui otomatis).
+  const aktif = document.activeElement;
+  const fokus = $('daftar').contains(aktif) && aktif.getAttribute('aria-label');
   $('daftar').replaceChildren(...(isi.length ? isi : [el('li', 'kosong', kosong)]));
+  if (fokus) { const b = $('daftar').querySelector(`[aria-label="${CSS.escape(fokus)}"]`); if (b) b.focus({ preventScroll: true }); }
   const kunci = [pilih.tab, pilih.sesi, data.dimuatUntuk, $('kelas').value].join('|');
   if (kunci !== kunciDaftar) { kunciDaftar = kunci; masuk($('daftar')); }
   else if (tandaiBaru) for (const li of $('daftar').children) if (li.dataset.kunci && !lama.has(li.dataset.kunci)) li.dataset.baru = '';

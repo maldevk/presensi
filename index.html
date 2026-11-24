@@ -44,7 +44,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: clip; }
-html { scrollbar-color: var(--color-muted) var(--color-paper); }
+html { scrollbar-color: var(--color-muted) var(--color-paper); scrollbar-gutter: stable; } /* lebar tetap saat pindah Presensi/Izin, agar jempol tidak melompat */
 body {
   margin: 0; min-height: 100dvh; background: var(--grain), var(--fibre), var(--color-paper); color: var(--color-ink);
   font-family: var(--font-body); font-size: var(--text-md); font-weight: 500; line-height: 1.5;
@@ -205,6 +205,10 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 }
 
 .terima { --sheet: var(--color-mint); color: var(--color-on-fill); padding: var(--space-lg) var(--space-md) var(--space-xl); }
+/* Akhir alur: centang tergambar sekali saat tanda terima muncul (hidden → tampil memulai ulang animasinya). */
+.centang { display: block; width: 2.5rem; height: 2.5rem; margin-bottom: var(--space-sm); fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.centang path { stroke-dasharray: 1; animation: gores 400ms cubic-bezier(0.16, 1, 0.3, 1) 120ms backwards; }
+@keyframes gores { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 .terima strong { display: block; font-size: var(--text-xl); font-weight: 600; line-height: 1.2; }
 .terima dl { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: var(--space-md) 0 0; }
 .terima dt, .terima dd { margin: 0; padding-block: var(--space-xs); border-top: 1px dashed var(--color-on-fill); }
@@ -237,7 +241,7 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 @media (prefers-reduced-motion: reduce) {
   #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info,
   .mode button { transition: none; }
-  .kerangka span, .btn--primary[aria-busy="true"]::before { animation: none; }
+  .kerangka span, .btn--primary[aria-busy="true"]::before, .centang path { animation: none; }
   .mode button[aria-pressed="false"]:active { scale: none; }
   .btn--primary { transition: none; }
   .btn--primary:active, .btn--primary:disabled, .btn--primary:not(:disabled, :active):hover { translate: none; }
@@ -337,6 +341,7 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   </form>
 
   <section id="terima" class="terima" hidden tabindex="-1">
+    <svg class="centang" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" pathLength="1"/></svg>
     <strong id="t-judul">Presensi tercatat.</strong>
     <dl id="t-isi"></dl>
   </section>
