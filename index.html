@@ -122,6 +122,7 @@ input[type="date"] { padding-inline: var(--space-sm); }
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
   border-radius: var(--radius-input); background: var(--color-paper-2);
   touch-action: pan-y; user-select: none; -webkit-user-select: none;
+  contain: layout; /* jempol berubah ukuran tiap frame; susun ulang cukup di dalam grup ini, bukan seluruh halaman */
 }
 .mode button {
   position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;
@@ -687,18 +688,25 @@ const sama = (a, b) => !!a && !!b && a.every((n, i) => n === b[i]);
 
 function karet(g) {
   const x = [0, 0, 0, 0], v = [0, 0, 0, 0], motor = [null, null, null, null]; // tepi kiri, atas, kanan, bawah
-  let slot = [], sasaran = null, bingkai = 0, lalu = 0, serah = 0, seret = null;
+  let slot = [], sasaran = null, bingkai = 0, lalu = 0, seret = null;
   const tombol = () => [...g.querySelectorAll('button')];
   const tulis = () => ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, x[i] + 'px'));
-  const jalan = now => {
-    const dt = Math.min(0.05, (now - lalu) / 1000);
+  // Waktu dihitung dari frame pertama yang digambar, bukan dari klik: di ponsel frame pertama sesudah klik bisa
+  // telat puluhan ms (menyusun ulang formulir), dan cap waktunya bisa lebih awal dari klik. Dulu progres jadi
+  // negatif dan jempol berkedip jauh keluar satu frame, atau melompat dan fase regangnya terpotong.
+  const jalan = () => {
+    const now = performance.now(); // cap waktu rAF untuk frame yang telat masih waktu jadwalnya, bukan waktu jalannya
+    const dt = lalu ? Math.min(0.05, Math.max(0, now - lalu) / 1000) : 0;
     lalu = now;
+    let daratkan = null;
     motor.forEach((m, i) => {
       if (!m) return;
       if (m.lama) { // tween regang
-        const awal = x[i], p = (now - m.mulai) / m.lama;
+        if (!m.mulai) m.mulai = now;
+        const awal = x[i], p = Math.min(1, (now - m.mulai) / m.lama);
         x[i] = m.dari + (m.ke - m.dari) * lunak(p);
         v[i] = dt ? (x[i] - awal) / dt : 0;
+        if (m.darat && now - m.mulai >= 150) daratkan = m.darat;
         if (p >= 1) motor[i] = null;
         return;
       }
@@ -709,15 +717,15 @@ function karet(g) {
       }
       if (Math.abs(x[i] - m.ke) < 0.1 && Math.abs(v[i]) < 5) { x[i] = m.ke; v[i] = 0; motor[i] = null; if (m.lalu) m.lalu(); }
     });
+    if (daratkan) daratkan();
     tulis();
     bingkai = motor.some(Boolean) ? requestAnimationFrame(jalan) : 0;
   };
-  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = performance.now(); bingkai = requestAnimationFrame(jalan); } };
-  const henti = () => { clearTimeout(serah); motor.fill(null); v.fill(0); };
+  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = 0; bingkai = requestAnimationFrame(jalan); } };
+  const henti = () => { motor.fill(null); v.fill(0); };
   const lompat = tuju => { henti(); sasaran = tuju; x.splice(0, 4, ...tuju); tulis(); };
   // Tepi depan melesat ke tujuan; tepi belakang menyusul, memampat bila diminta, lalu kembali.
   const darat = (tuju, kec, lempar, pampat) => {
-    clearTimeout(serah);
     sasaran = tuju;
     for (const [a, b] of [[0, 2], [1, 3]]) {
       const geser = tuju[a] + tuju[b] - x[a] - x[b], d = Math.sign(geser) || 1;
@@ -728,13 +736,11 @@ function karet(g) {
       gerak(belakang, { ...PEGAS_UI, ke: tuju[belakang] + p, lalu: p ? () => gerak(belakang, { ...PEGAS_LEPAS, ke: tuju[belakang] }) : null });
     }
   };
-  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms kemudian.
+  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms sesudah frame pertama regangan.
   const pindah = tuju => {
-    clearTimeout(serah);
     sasaran = tuju;
-    const mulai = performance.now();
-    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai, lama: 190 }));
-    serah = setTimeout(() => darat(tuju, null, false, true), 150);
+    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai: 0, lama: 190 }));
+    motor[0].darat = () => darat(tuju, null, false, true);
   };
   const segarkan = paksa => {
     const semua = tombol();

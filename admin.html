@@ -110,6 +110,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
   position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
   border-radius: var(--radius-input); background: var(--color-paper-2);
   touch-action: pan-y; user-select: none; -webkit-user-select: none;
+  contain: layout; /* jempol berubah ukuran tiap frame; susun ulang cukup di dalam grup ini, bukan seluruh halaman */
 }
 .pilihan button { position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; transition: scale var(--dur-micro) var(--ease-snap); }
 .pilihan button[aria-pressed="true"] { color: var(--color-ink); }
@@ -895,26 +896,35 @@ function ubahTtdKlik(xs, nilai, diam) {
   simpanBelakang('ttd', nama, () => panggilUlang('ubahTtd', { token: admin.token, tanggal, foto: xs.map(x => x.foto), nilai }));
 }
 // Foto untuk rekap: versi kecil dari Drive (memakai yang sudah dimuat daftar), tiga sekaligus supaya jatah
-// eksekusi serentak tetap tersisa untuk mahasiswa. Diseragamkan menjadi JPEG persegi 320 px, foto utuh di tengah.
-async function fotoRekap(id, kemajuan) {
-  const hasil = new Map(), antre = [...id];
+// eksekusi serentak tetap tersisa untuk mahasiswa. Tiap kunci = ID foto dipisah koma (bukti izin bisa 2-3 foto);
+// semua digabung menjadi satu JPEG persegi 320 px, tiap foto utuh di petaknya.
+const PETAK_REKAP = { 1: [[0, 0, 320, 320]], 2: [[0, 0, 160, 320], [160, 0, 160, 320]], 3: [[0, 0, 160, 160], [160, 0, 160, 160], [80, 160, 160, 160]] };
+async function fotoRekap(kunci, kemajuan) {
+  const hasil = new Map(), antre = [...kunci];
   let selesai = 0;
+  const muat = async f => {
+    const img = new Image();
+    img.src = fotoKecil.get(f) || await ambilFoto(f, false);
+    await img.decode();
+    return img;
+  };
   const kerja = async () => {
-    for (let f; (f = antre.shift());) {
+    for (let kn; (kn = antre.shift());) {
       try {
-        const url = fotoKecil.get(f) || await ambilFoto(f, false);
-        const img = new Image();
-        img.src = url;
-        await img.decode();
+        const img = (await Promise.allSettled(kn.split(',').map(muat))).filter(x => x.status === 'fulfilled').map(x => x.value);
+        if (!img.length) throw new Error('tidak ada foto');
         const k = Object.assign(document.createElement('canvas'), { width: 320, height: 320 });
-        const c = k.getContext('2d'), skala = Math.min(320 / img.naturalWidth, 320 / img.naturalHeight);
-        const w = img.naturalWidth * skala, h = img.naturalHeight * skala;
+        const c = k.getContext('2d');
         c.fillStyle = '#fff';
         c.fillRect(0, 0, 320, 320);
-        c.drawImage(img, (320 - w) / 2, (320 - h) / 2, w, h);
+        PETAK_REKAP[Math.min(img.length, 3)].forEach(([x, y, pw, ph], i) => {
+          const skala = Math.min((pw - 4) / img[i].naturalWidth, (ph - 4) / img[i].naturalHeight);
+          const w = img[i].naturalWidth * skala, h = img[i].naturalHeight * skala;
+          c.drawImage(img[i], x + (pw - w) / 2, y + (ph - h) / 2, w, h);
+        });
         const blob = await new Promise(ok => k.toBlob(ok, 'image/jpeg', 0.85));
-        hasil.set(f, new Uint8Array(await blob.arrayBuffer()));
-      } catch (e) { /* foto ini tampil sebagai tautan saja */ }
+        hasil.set(kn, new Uint8Array(await blob.arrayBuffer()));
+      } catch (e) { /* bukti ini tampil sebagai tautan saja */ }
       kemajuan(++selesai);
     }
   };
@@ -1363,18 +1373,25 @@ const sama = (a, b) => !!a && !!b && a.every((n, i) => n === b[i]);
 
 function karet(g) {
   const x = [0, 0, 0, 0], v = [0, 0, 0, 0], motor = [null, null, null, null]; // tepi kiri, atas, kanan, bawah
-  let slot = [], sasaran = null, bingkai = 0, lalu = 0, serah = 0, seret = null;
+  let slot = [], sasaran = null, bingkai = 0, lalu = 0, seret = null;
   const tombol = () => [...g.querySelectorAll('button')];
   const tulis = () => ['--l', '--t', '--r', '--b'].forEach((k, i) => g.style.setProperty(k, x[i] + 'px'));
-  const jalan = now => {
-    const dt = Math.min(0.05, (now - lalu) / 1000);
+  // Waktu dihitung dari frame pertama yang digambar, bukan dari klik: di ponsel frame pertama sesudah klik bisa
+  // telat puluhan ms (menyusun ulang formulir), dan cap waktunya bisa lebih awal dari klik. Dulu progres jadi
+  // negatif dan jempol berkedip jauh keluar satu frame, atau melompat dan fase regangnya terpotong.
+  const jalan = () => {
+    const now = performance.now(); // cap waktu rAF untuk frame yang telat masih waktu jadwalnya, bukan waktu jalannya
+    const dt = lalu ? Math.min(0.05, Math.max(0, now - lalu) / 1000) : 0;
     lalu = now;
+    let daratkan = null;
     motor.forEach((m, i) => {
       if (!m) return;
       if (m.lama) { // tween regang
-        const awal = x[i], p = (now - m.mulai) / m.lama;
+        if (!m.mulai) m.mulai = now;
+        const awal = x[i], p = Math.min(1, (now - m.mulai) / m.lama);
         x[i] = m.dari + (m.ke - m.dari) * lunak(p);
         v[i] = dt ? (x[i] - awal) / dt : 0;
+        if (m.darat && now - m.mulai >= 150) daratkan = m.darat;
         if (p >= 1) motor[i] = null;
         return;
       }
@@ -1385,15 +1402,15 @@ function karet(g) {
       }
       if (Math.abs(x[i] - m.ke) < 0.1 && Math.abs(v[i]) < 5) { x[i] = m.ke; v[i] = 0; motor[i] = null; if (m.lalu) m.lalu(); }
     });
+    if (daratkan) daratkan();
     tulis();
     bingkai = motor.some(Boolean) ? requestAnimationFrame(jalan) : 0;
   };
-  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = performance.now(); bingkai = requestAnimationFrame(jalan); } };
-  const henti = () => { clearTimeout(serah); motor.fill(null); v.fill(0); };
+  const gerak = (i, m) => { motor[i] = m; if (!bingkai) { lalu = 0; bingkai = requestAnimationFrame(jalan); } };
+  const henti = () => { motor.fill(null); v.fill(0); };
   const lompat = tuju => { henti(); sasaran = tuju; x.splice(0, 4, ...tuju); tulis(); };
   // Tepi depan melesat ke tujuan; tepi belakang menyusul, memampat bila diminta, lalu kembali.
   const darat = (tuju, kec, lempar, pampat) => {
-    clearTimeout(serah);
     sasaran = tuju;
     for (const [a, b] of [[0, 2], [1, 3]]) {
       const geser = tuju[a] + tuju[b] - x[a] - x[b], d = Math.sign(geser) || 1;
@@ -1404,13 +1421,11 @@ function karet(g) {
       gerak(belakang, { ...PEGAS_UI, ke: tuju[belakang] + p, lalu: p ? () => gerak(belakang, { ...PEGAS_LEPAS, ke: tuju[belakang] }) : null });
     }
   };
-  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms kemudian.
+  // Klik atau tombol panah: meregang menutup kedua tab, lalu mendarat 150 ms sesudah frame pertama regangan.
   const pindah = tuju => {
-    clearTimeout(serah);
     sasaran = tuju;
-    const mulai = performance.now();
-    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai, lama: 190 }));
-    serah = setTimeout(() => darat(tuju, null, false, true), 150);
+    x.forEach((n, i) => gerak(i, { dari: n, ke: i < 2 ? Math.min(n, tuju[i]) : Math.max(n, tuju[i]), mulai: 0, lama: 190 }));
+    motor[0].darat = () => darat(tuju, null, false, true);
   };
   const segarkan = paksa => {
     const semua = tombol();
@@ -1507,7 +1522,8 @@ function isiRekap(d, kelas) {
   const [y, b, h] = d.tanggal.split('-').map(Number);
   const hari = HARI_REKAP[new Date(Date.UTC(y, b - 1, h)).getUTCDay()];
   const siapa = kelas ? 'KELAS ' + kelas : 'SEMUA KELAS';
-  const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto), foto });
+  // foto = ID dipisah koma; bukti izin 2-3 foto menjadi satu kolase di sel G, tautan cadangan ke foto pertama.
+  const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto[0]), foto: foto.join(',') });
   const lembar = d.sesi.map((s, i) => {
     const n = { HADIR: 0, TERLAMBAT: 0, IZIN: 0, ALFA: 0 };
     const baris = mhs.map((m, no) => {
@@ -1517,16 +1533,16 @@ function isiRekap(d, kelas) {
       let g = '-', ket = st;
       if (st === 'HADIR' || st === 'TERLAMBAT') {
         const x = kiriman.find(k => k.verifikasi !== 'TOLAK');
-        g = bukti(x.jam, x.foto);
+        g = bukti(x.jam, [x.foto]);
         ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
       } else if (st === 'IZIN') {
         const z = d.pengajuan.find(z => z.nim === m.nim && z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
           (z.cakupan === 'SEHARI' || z.cakupan === s));
-        if (z && z.bukti.length) g = bukti('Bukti izin', z.bukti[0]);
+        if (z && z.bukti.length) g = bukti('Bukti izin', z.bukti);
         ket = z ? `IZIN: ${z.jenis}` + (z.catatan ? `; ${z.catatan}` : '') : 'IZIN';
       } else {
         const x = kiriman.find(k => k.verifikasi === 'TOLAK');
-        if (x) { g = bukti(x.jam, x.foto); ket = 'ALFA: presensi ditolak'; }
+        if (x) { g = bukti(x.jam, [x.foto]); ket = 'ALFA: presensi ditolak'; }
       }
       return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, g, ket];
     });
