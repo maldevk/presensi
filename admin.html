@@ -892,6 +892,34 @@ function ubahTtdKlik(xs, nilai, diam) {
   const tanggal = data.tanggal;
   simpanBelakang('ttd', nama, () => panggilUlang('ubahTtd', { token: admin.token, tanggal, foto: xs.map(x => x.foto), nilai }));
 }
+// Foto untuk rekap: versi kecil dari Drive (memakai yang sudah dimuat daftar), tiga sekaligus supaya jatah
+// eksekusi serentak tetap tersisa untuk mahasiswa. Diseragamkan menjadi JPEG persegi 320 px, foto utuh di tengah.
+async function fotoRekap(id, kemajuan) {
+  const hasil = new Map(), antre = [...id];
+  let selesai = 0;
+  const kerja = async () => {
+    for (let f; (f = antre.shift());) {
+      try {
+        const url = fotoKecil.get(f) || await ambilFoto(f, false);
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const k = Object.assign(document.createElement('canvas'), { width: 320, height: 320 });
+        const c = k.getContext('2d'), skala = Math.min(320 / img.naturalWidth, 320 / img.naturalHeight);
+        const w = img.naturalWidth * skala, h = img.naturalHeight * skala;
+        c.fillStyle = '#fff';
+        c.fillRect(0, 0, 320, 320);
+        c.drawImage(img, (320 - w) / 2, (320 - h) / 2, w, h);
+        const blob = await new Promise(ok => k.toBlob(ok, 'image/jpeg', 0.85));
+        hasil.set(f, new Uint8Array(await blob.arrayBuffer()));
+      } catch (e) { /* foto ini tampil sebagai tautan saja */ }
+      kemajuan(++selesai);
+    }
+  };
+  await Promise.all([kerja(), kerja(), kerja()]);
+  return hasil;
+}
+
 // Rekap diambil segar dari server sesudah semua perubahan tersimpan, supaya berkas sama dengan Sheet.
 $('unduh-rekap').addEventListener('click', async () => {
   const b = $('unduh-rekap');
@@ -905,12 +933,14 @@ $('unduh-rekap').addEventListener('click', async () => {
     if (r.tolak) return beriTahu(r.tolak);
     if (!r.sesi.length) return beriTahu('Belum ada sesi kuliah yang dibuka pada tanggal ini.');
     const { nama, lembar } = isiRekap(r, $('kelas').value);
-    const url = URL.createObjectURL(new Blob([berkasXlsx(lembar)],
+    const id = [...new Set(lembar.flatMap(l => l.baris.map(x => x[6].foto).filter(Boolean)))];
+    const gambar = await fotoRekap(id, (n) => { b.textContent = `Mengambil foto ${n}/${id.length}…`; });
+    const url = URL.createObjectURL(new Blob([berkasXlsx(lembar, gambar)],
       { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: nama });
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    beriTahu(`Rekap diunduh: ${nama}`);
+    beriTahu(`Rekap diunduh: ${nama}` + (gambar.size < id.length ? `. ${id.length - gambar.size} foto gagal dimuat, tampil sebagai tautan saja.` : ''));
   } catch (e) {
     beriTahu('Rekap gagal dibuat. Periksa sinyal lalu coba lagi.');
   } finally {
@@ -1456,11 +1486,15 @@ document.querySelectorAll('.pilihan').forEach(karet);
 if (admin) bukaPanel(); else muatAkun();
 </script>
 <script id="rekap-xlsx">
-// Berkas rekap .xlsx tanpa pustaka: beberapa XML di dalam zip tanpa kompresi. Fungsi murni, diuji di tests/rekap.test.js.
+// Berkas rekap .xlsx tanpa pustaka: beberapa XML dan foto JPEG di dalam zip tanpa kompresi.
+// Fungsi murni (foto diberikan sebagai byte), diuji di tests/rekap.test.js.
 const BULAN_REKAP = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
 const HARI_REKAP = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
 const KEPALA_REKAP = ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH (KAPITAL)', 'KELAS', 'PRESENSI', 'BUKTI TIMESTAMP (1:1)', 'KETERANGAN'];
-const LEBAR_REKAP = [9.63, 32, 18.88, 23.88, 9, 13, 23.13, 30];
+// Lebar kolom (karakter) dipilih agar A4 tegak muat selebar halaman tanpa mengecilkan foto terlalu jauh.
+const LEBAR_REKAP = [5, 28, 16, 16, 7, 12, 18, 24];
+const FOTO_PX = 110; // sisi foto di sel G; baris berfoto setinggi teks jam + foto
+const TINGGI_BERFOTO_PT = 100;
 const tautanDrive = id => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
 
 // Isi tiap sheet dari jawaban dataHari: satu baris per mahasiswa aktif, status dari server (sama dengan menu Rekap).
@@ -1469,27 +1503,28 @@ function isiRekap(d, kelas) {
   const [y, b, h] = d.tanggal.split('-').map(Number);
   const hari = HARI_REKAP[new Date(Date.UTC(y, b - 1, h)).getUTCDay()];
   const siapa = kelas ? 'KELAS ' + kelas : 'SEMUA KELAS';
+  const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto), foto });
   const lembar = d.sesi.map((s, i) => {
     const n = { HADIR: 0, TERLAMBAT: 0, IZIN: 0, ALFA: 0 };
     const baris = mhs.map((m, no) => {
       const st = m.tiap[i];
       n[st]++;
       const kiriman = d.hadir.filter(x => x.nim === m.nim && x.sesi === s);
-      let bukti = '-', ket = st;
+      let g = '-', ket = st;
       if (st === 'HADIR' || st === 'TERLAMBAT') {
         const x = kiriman.find(k => k.verifikasi !== 'TOLAK');
-        bukti = { teks: x.jam, url: tautanDrive(x.foto) };
+        g = bukti(x.jam, x.foto);
         ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
       } else if (st === 'IZIN') {
         const z = d.pengajuan.find(z => z.nim === m.nim && z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
           (z.cakupan === 'SEHARI' || z.cakupan === s));
-        if (z && z.bukti.length) bukti = { teks: 'Bukti izin', url: tautanDrive(z.bukti[0]) };
+        if (z && z.bukti.length) g = bukti('Bukti izin', z.bukti[0]);
         ket = z ? `IZIN: ${z.jenis}` + (z.catatan ? `; ${z.catatan}` : '') : 'IZIN';
       } else {
         const x = kiriman.find(k => k.verifikasi === 'TOLAK');
-        if (x) { bukti = { teks: x.jam, url: tautanDrive(x.foto) }; ket = 'ALFA: presensi ditolak'; }
+        if (x) { g = bukti(x.jam, x.foto); ket = 'ALFA: presensi ditolak'; }
       }
-      return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, bukti, ket];
+      return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, g, ket];
     });
     return {
       nama: s,
@@ -1504,10 +1539,14 @@ function isiRekap(d, kelas) {
 const xmlAman = v => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
   .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const kolomHuruf = i => String.fromCharCode(65 + i);
+const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const NS_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const relasi = daftar => XML + `<Relationships xmlns="${NS_REL}">` + daftar.map(([id, jenis, target, luar]) =>
+  `<Relationship Id="${id}" Type="${NS_R}/${jenis}" Target="${xmlAman(target)}"${luar ? ' TargetMode="External"' : ''}/>`).join('') + '</Relationships>';
 
-// Gaya: 1 judul tebal di tengah, 2 kepala tebal berbingkai, 3 isi berbingkai, 4 tautan berbingkai.
-const GAYA_REKAP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-  '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+// Gaya: 1 judul tebal di tengah, 2 kepala tebal berbingkai, 3 isi berbingkai di tengah vertikal, 4 tautan berbingkai di atas.
+const GAYA_REKAP = XML + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
   '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
   '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/></font></fonts>' +
   '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
@@ -1515,62 +1554,97 @@ const GAYA_REKAP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
   '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>' +
-  '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>' +
-  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
-  '<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/></cellXfs>' +
-  '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" wrapText="1"/></xf>' +
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+  '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
 
-function xmlLembar(l) {
-  const tautan = [];
+// Satu sheet. gambar: Map id foto -> byte JPEG; foto yang tidak ada tetap tampil sebagai tautan saja.
+function xmlLembar(l, gambar, nomor) {
+  const tautan = [], foto = [];
   const sel = (ref, v, gaya) => {
-    if (v && typeof v === 'object') { tautan.push([ref, v.url]); return sel(ref, v.teks, 4); }
+    if (v && typeof v === 'object') {
+      tautan.push([ref, v.url]);
+      if (gambar.has(v.foto)) foto.push([ref, v.foto]);
+      return sel(ref, v.teks, 4);
+    }
     return typeof v === 'number'
       ? `<c r="${ref}" s="${gaya}"><v>${v}</v></c>`
       : `<c r="${ref}" s="${gaya}" t="inlineStr"><is><t xml:space="preserve">${xmlAman(v)}</t></is></c>`;
   };
-  const baris = (r, isi, gaya) => `<row r="${r}">${isi.map((v, i) => sel(kolomHuruf(i) + r, v, gaya)).join('')}</row>`;
+  const baris = (r, isi, gaya) => {
+    const sel2 = isi.map((v, i) => sel(kolomHuruf(i) + r, v, gaya)).join('');
+    const tinggi = gaya === 3 && foto.length && foto[foto.length - 1][0] === 'G' + r ? ` ht="${TINGGI_BERFOTO_PT}" customHeight="1"` : '';
+    return `<row r="${r}"${tinggi}>${sel2}</row>`;
+  };
   const rows = [baris(1, [l.judul], 1), baris(2, KEPALA_REKAP, 2), ...l.baris.map((b, i) => baris(i + 3, b, 3)),
     baris(l.baris.length + 4, [l.ringkas], 0)];
-  const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+  const rels = tautan.map(([, url], i) => [`rId${i + 1}`, 'hyperlink', url, true]);
+  const idGambar = `rId${tautan.length + 1}`;
+  if (foto.length) rels.push([idGambar, 'drawing', `../drawings/drawing${nomor}.xml`]);
+  const xml = XML +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${NS_R}">` +
+    '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
     `<cols>${LEBAR_REKAP.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` +
     `<sheetData>${rows.join('')}</sheetData><mergeCells count="1"><mergeCell ref="A1:H1"/></mergeCells>` +
     (tautan.length ? `<hyperlinks>${tautan.map(([ref], i) => `<hyperlink ref="${ref}" r:id="rId${i + 1}"/>`).join('')}</hyperlinks>` : '') +
-    '</worksheet>';
-  const rels = tautan.length ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-    tautan.map(([, url], i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xmlAman(url)}" TargetMode="External"/>`).join('') +
-    '</Relationships>' : null;
-  return { xml, rels };
+    '<printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
+    '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' +
+    (foto.length ? `<drawing r:id="${idGambar}"/>` : '') + '</worksheet>';
+  return { xml, rels, foto };
 }
 
-function berkasXlsx(lembar) {
-  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-  const kepala = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-  const berkas = [
-    ['[Content_Types].xml', kepala + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+// Foto ditambatkan di sel G, digeser ke bawah teks jam. 1 px = 9525 EMU.
+function xmlGambar(foto, nomorAwal) {
+  const emu = FOTO_PX * 9525;
+  return XML + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
+    `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${NS_R}">` +
+    foto.map(([ref], i) => {
+      const n = nomorAwal + i;
+      return `<xdr:oneCellAnchor><xdr:from><xdr:col>6</xdr:col><xdr:colOff>38100</xdr:colOff><xdr:row>${Number(ref.slice(1)) - 1}</xdr:row>` +
+        `<xdr:rowOff>200025</xdr:rowOff></xdr:from><xdr:ext cx="${emu}" cy="${emu}"/>` +
+        `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n + 1}" name="Foto ${n}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+        `<xdr:blipFill><a:blip r:embed="rId${i + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu}" cy="${emu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
+        '</xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+    }).join('') + '</xdr:wsDr>';
+}
+
+function berkasXlsx(lembar, gambar = new Map()) {
+  const isi = [], media = new Map(); // id foto -> nama berkas media (foto yang sama di PAGI dan SORE disimpan sekali)
+  const timpa = [];
+  lembar.forEach((l, i) => {
+    const nomor = i + 1;
+    const { xml, rels, foto } = xmlLembar(l, gambar, nomor);
+    isi.push([`xl/worksheets/sheet${nomor}.xml`, xml]);
+    if (rels.length) isi.push([`xl/worksheets/_rels/sheet${nomor}.xml.rels`, relasi(rels)]);
+    if (!foto.length) return;
+    for (const [, id] of foto) if (!media.has(id)) media.set(id, `image${media.size + 1}.jpeg`);
+    isi.push([`xl/drawings/drawing${nomor}.xml`, xmlGambar(foto, nomor * 1000)],
+      [`xl/drawings/_rels/drawing${nomor}.xml.rels`, relasi(foto.map(([, id], k) => [`rId${k + 1}`, 'image', '../media/' + media.get(id)]))]);
+    timpa.push(`<Override PartName="/xl/drawings/drawing${nomor}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+  });
+  for (const [id, nama] of media) isi.push(['xl/media/' + nama, gambar.get(id)]);
+  // Baris judul kolom diulang di setiap halaman cetak.
+  const judulCetak = lembar.map((l, i) => `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${xmlAman(l.nama)}'!$2:$2</definedName>`).join('');
+  return zipTanpaKompresi([
+    ['[Content_Types].xml', XML + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
       '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
       lembar.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
-      '</Types>'],
-    ['_rels/.rels', kepala + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      `<Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
-    ['xl/workbook.xml', kepala + `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${R}"><sheets>` +
-      lembar.map((l, i) => `<sheet name="${xmlAman(l.nama)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>'],
-    ['xl/_rels/workbook.xml.rels', kepala + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      lembar.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${R}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
-      `<Relationship Id="rId${lembar.length + 1}" Type="${R}/styles" Target="styles.xml"/></Relationships>`],
+      timpa.join('') + '</Types>'],
+    ['_rels/.rels', relasi([['rId1', 'officeDocument', 'xl/workbook.xml']])],
+    ['xl/workbook.xml', XML + `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${NS_R}"><sheets>` +
+      lembar.map((l, i) => `<sheet name="${xmlAman(l.nama)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
+      `</sheets><definedNames>${judulCetak}</definedNames></workbook>`],
+    ['xl/_rels/workbook.xml.rels', relasi([...lembar.map((_, i) => [`rId${i + 1}`, 'worksheet', `worksheets/sheet${i + 1}.xml`]),
+      [`rId${lembar.length + 1}`, 'styles', 'styles.xml']])],
     ['xl/styles.xml', GAYA_REKAP],
-  ];
-  lembar.forEach((l, i) => {
-    const { xml, rels } = xmlLembar(l);
-    berkas.push([`xl/worksheets/sheet${i + 1}.xml`, xml]);
-    if (rels) berkas.push([`xl/worksheets/_rels/sheet${i + 1}.xml.rels`, rels]);
-  });
-  return zipTanpaKompresi(berkas);
+    ...isi,
+  ]);
 }
 
 const TABEL_CRC = Array.from({ length: 256 }, (_, n) => {
@@ -1584,6 +1658,7 @@ function crc32(b) {
 }
 
 // Zip "stored": tiap berkas = kepala lokal + isi; lalu direktori pusat dan penutup. Tanggal berkas 1 Jan 1980.
+// Isi berupa teks (XML) atau byte (foto).
 function zipTanpaKompresi(berkas) {
   const enc = new TextEncoder();
   const tulis = (besar, isian) => {
@@ -1593,8 +1668,8 @@ function zipTanpaKompresi(berkas) {
   };
   const bagian = [], pusat = [];
   let posisi = 0;
-  for (const [nama, teks] of berkas) {
-    const n = enc.encode(nama), isi = enc.encode(teks), crc = crc32(isi);
+  for (const [nama, data] of berkas) {
+    const n = enc.encode(nama), isi = typeof data === 'string' ? enc.encode(data) : data, crc = crc32(isi);
     bagian.push(tulis(30, [[0, 0x04034b50, 4], [4, 20, 2], [12, 0x21, 2], [14, crc, 4], [18, isi.length, 4], [22, isi.length, 4], [26, n.length, 2]]), n, isi);
     pusat.push(tulis(46, [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [14, 0x21, 2], [16, crc, 4], [20, isi.length, 4], [24, isi.length, 4],
       [28, n.length, 2], [42, posisi, 4]]), n);
