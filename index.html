@@ -151,6 +151,9 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .mode button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .panel { display: grid; gap: var(--space-md); min-width: 0; }
 .dua { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
+/* Label, kontrol, dan galat dua isian berbagi baris (subgrid): kontrol tetap sejajar walau satu label terlipat. */
+.dua > .bidang { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 0; }
+.dua > .bidang > label { align-self: end; }
 .pratinjau-bukti { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 .pratinjau-bukti:not(:empty) { margin-top: var(--space-sm); }
 .pratinjau-bukti img { width: 5rem; height: 5rem; object-fit: cover; border-radius: var(--radius-input); }

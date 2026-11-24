@@ -98,13 +98,18 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 #layar-masuk form { display: grid; gap: var(--space-md); }
 
 /* Kepala panel; bagian panel diberi jarak tetap supaya kelompok saringan, tab, dan daftar terbaca terpisah */
-#layar-panel, #bagian-harian { display: grid; gap: var(--space-md); align-content: start; }
+#layar-panel, #bagian-harian, #bagian-atur, #bagian-mhs, #bagian-akun { display: grid; gap: var(--space-md); align-content: start; }
 .kepala { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .akun { display: flex; align-items: center; gap: var(--space-xs); color: var(--color-muted); font-size: var(--text-sm); }
 .akun strong { color: var(--color-ink); }
 
 .saring { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
 .saring .lebar { grid-column: 1 / -1; }
+.saring.dua { grid-template-columns: minmax(0, 1fr); } /* di ponsel Kelas selebar Cari di bawahnya */
+/* Di ponsel tab daftar cukup "Sudah" / "Belum" agar tidak terlipat; kata "presensi" tetap dibaca pembaca layar. */
+@media (max-width: 39.99rem) {
+  .lengkap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 
 .pilihan {
   position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
@@ -179,6 +184,10 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 fieldset { margin: 0; padding: var(--space-lg) var(--space-md); border: 0; display: grid; gap: var(--space-sm); min-width: 0; }
 legend { float: left; width: 100%; margin-bottom: var(--space-xs); padding: 0; font-size: var(--text-lg); font-weight: 600; }
 .isian { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
+/* Label dan dropdown berbagi baris (subgrid): dropdown tetap sejajar walau satu label terlipat. */
+.isian > div { display: grid; grid-row: span 2; grid-template-rows: subgrid; row-gap: 0; }
+.isian > div > label { align-self: end; }
+.isian.satu { grid-template-columns: minmax(0, 1fr); } /* pilihan berteks panjang (Umum) terpotong bila dua kolom di ponsel */
 .catatan-kecil { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
 .libur { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-xs); align-items: center; }
 .libur .lebar { grid-column: 1 / -1; }
@@ -215,7 +224,7 @@ dialog p { margin: var(--space-sm) 0; }
   .baris { grid-template-columns: 4rem minmax(0, 1fr) auto; }
   .aksi { grid-column: auto; grid-template-columns: repeat(3, 6rem); }
   .baris.tanpa-foto { grid-template-columns: minmax(0, 1fr) auto; }
-  .isian { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .isian, .isian.satu { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .libur { grid-template-columns: 11rem minmax(0, 1fr) auto; }
   .libur .lebar { grid-column: auto; }
   #pilih-layar { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -309,8 +318,8 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
       </span>
     </div>
     <div class="pilihan" role="group" aria-label="Daftar">
-      <button type="button" id="tab-hadir" aria-pressed="true">Sudah presensi</button>
-      <button type="button" id="tab-belum" aria-pressed="false">Belum presensi</button>
+      <button type="button" id="tab-hadir" aria-pressed="true">Sudah<span class="lengkap"> presensi</span></button>
+      <button type="button" id="tab-belum" aria-pressed="false">Belum<span class="lengkap"> presensi</span></button>
       <button type="button" id="tab-izin" aria-pressed="false">Izin</button>
     </div>
     <div id="pesan-panel" class="pesan" role="alert" hidden></div>
@@ -1097,7 +1106,7 @@ function isiAtur(r) {
   $('atur-isi').replaceChildren(...KELOMPOK_ATUR.map(([judul, kunci]) => {
     const f = el('fieldset', 'kartu');
     f.append(el('legend', '', judul));
-    const isian = el('div', 'isian');
+    const isian = el('div', judul === 'Umum' ? 'isian satu' : 'isian');
     for (const k of kunci) {
       const s = el('select');
       s.id = 'atur-' + k;
