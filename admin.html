@@ -132,6 +132,8 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .ringkas { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
 .ringkas li { padding: var(--space-2xs) var(--space-sm); border-radius: var(--radius-pill); background: var(--color-paper-2); font-size: var(--text-sm); }
 .ringkas b { font-variant-numeric: tabular-nums; }
+.tombol-baris { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+#ttd-semua { justify-self: start; }
 .perbarui { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs) var(--space-sm); color: var(--color-muted); }
 /* Baris yang baru datang lewat pembaruan otomatis disorot kuning sebentar supaya admin melihatnya. */
 .daftar > li[data-baru] { animation: sorot 2.4s ease-out; }
@@ -155,10 +157,12 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .lencana.TERLAMBAT { background: var(--color-sand); }
 .lencana.TOLAK { background: var(--color-accent-3); }
 .lencana.OK { background: var(--color-paper-3); }
-.aksi { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-xs); }
+.aksi { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
 .aksi button { min-height: 44px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-card); font-size: var(--text-sm); font-weight: 600; }
 .aksi button[aria-pressed="true"].ok { background: var(--color-mint); border-color: transparent; }
 .aksi button[aria-pressed="true"].tolak { background: var(--color-accent-3); border-color: transparent; }
+.aksi button[aria-pressed="true"].ttd { background: var(--color-paper-3); border-color: var(--color-ink); }
+.lencana.tanpa-ttd { background: var(--color-sand); }
 .aksi button:disabled { opacity: 0.6; cursor: wait; }
 .aksi button, .btn-tipis { transition: scale var(--dur-micro) var(--ease-snap); }
 .aksi button:not(:disabled):active, .btn-tipis:not(:disabled):active { scale: 0.96; }
@@ -206,7 +210,7 @@ dialog p { margin: var(--space-sm) 0; }
   .saring.dua { grid-template-columns: 10rem minmax(0, 1fr); } /* saringan dengan dua isian: Cari mengisi sisa lebar */
   .saring .lebar { grid-column: auto; }
   .baris { grid-template-columns: 4rem minmax(0, 1fr) auto; }
-  .aksi { grid-column: auto; grid-template-columns: 6rem 6rem; }
+  .aksi { grid-column: auto; grid-template-columns: repeat(3, 6rem); }
   .baris.tanpa-foto { grid-template-columns: minmax(0, 1fr) auto; }
   .isian { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .libur { grid-template-columns: 11rem minmax(0, 1fr) auto; }
@@ -296,7 +300,10 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
     <ul id="ringkas" class="ringkas" aria-live="polite"></ul>
     <div id="perbarui-baris" class="perbarui" hidden>
       <span id="status-perbarui"></span>
-      <button id="perbarui" class="btn-tipis" type="button">Perbarui sekarang</button>
+      <span class="tombol-baris">
+        <button id="perbarui" class="btn-tipis" type="button">Perbarui sekarang</button>
+        <button id="unduh-rekap" class="btn-tipis" type="button">Unduh rekap</button>
+      </span>
     </div>
     <div class="pilihan" role="group" aria-label="Daftar">
       <button type="button" id="tab-hadir" aria-pressed="true">Sudah presensi</button>
@@ -304,6 +311,7 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
       <button type="button" id="tab-izin" aria-pressed="false">Izin</button>
     </div>
     <div id="pesan-panel" class="pesan" role="alert" hidden></div>
+    <button id="ttd-semua" class="btn-tipis" type="button" hidden></button>
     <ul id="daftar" class="daftar" aria-label="Daftar mahasiswa"></ul>
     </div>
 
@@ -731,6 +739,9 @@ function gambar(tandaiBaru) {
   if (kunci !== kunciDaftar) { kunciDaftar = kunci; masuk($('daftar')); }
   else if (tandaiBaru) for (const li of $('daftar').children) if (li.dataset.kunci && !lama.has(li.dataset.kunci)) li.dataset.baru = '';
   for (const img of $('daftar').querySelectorAll('img[data-foto]')) pengamat.observe(img);
+  const calon = pilih.tab === 'hadir' ? calonTtd().length : 0;
+  $('ttd-semua').hidden = !calon;
+  $('ttd-semua').textContent = `Tandai semua TTD (${calon})`;
 }
 let kunciDaftar = ''; // isi daftar terakhir yang beranimasi masuk
 
@@ -761,6 +772,7 @@ function barisHadir(x) {
   if (x.verifikasi !== 'BELUM') {
     lencana.append(' ', el('span', 'lencana ' + x.verifikasi, (x.verifikasi === 'TOLAK' ? 'Ditolak' : 'Diperiksa') + ' oleh ' + x.oleh));
   }
+  if (x.ttd === 'TIDAK') lencana.append(' ', el('span', 'lencana tanpa-ttd', 'Tidak TTD'));
   isi.append(lencana);
 
   const aksi = el('div', 'aksi');
@@ -773,6 +785,13 @@ function barisHadir(x) {
     b.addEventListener('click', () => ubah(x, x.verifikasi === nilai ? 'BELUM' : nilai));
     aksi.append(b);
   }
+  // TTD = tanda tangan di daftar hadir kertas. Kosong berarti belum dicek; mematikan TTD mencatat TIDAK.
+  const t = el('button', 'ttd', x.ttd === 'YA' ? 'TTD ✓' : 'TTD');
+  t.type = 'button';
+  t.setAttribute('aria-pressed', String(x.ttd === 'YA'));
+  t.setAttribute('aria-label', `TTD kertas ${x.nama}`);
+  t.addEventListener('click', () => ubahTtdKlik([x], x.ttd === 'YA' ? 'TIDAK' : 'YA'));
+  aksi.append(t);
   li.append(foto, isi, aksi);
   return li;
 }
@@ -856,6 +875,53 @@ function ubah(x, nilai, diam) {
   }
   simpanBelakang('p:' + x.foto, x.nama, () => panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
 }
+
+// TTD satu baris atau banyak sekaligus (Tandai semua TTD). Batalkan mengembalikan nilai lama tiap baris.
+function ubahTtdKlik(xs, nilai, diam) {
+  ubahanKe++;
+  const lama = xs.map(x => x.ttd);
+  for (const x of xs) x.ttd = nilai;
+  gambar();
+  const nama = xs.length === 1 ? xs[0].nama : `${xs.length} mahasiswa`;
+  if (!diam) {
+    const teks = { YA: 'ditandai TTD', TIDAK: 'ditandai tidak TTD', '': 'dikosongkan TTD-nya' }[nilai];
+    beriTahu(`${nama} ${teks}.`, () => {
+      for (const v of new Set(lama)) ubahTtdKlik(xs.filter((_, i) => lama[i] === v), v, true);
+    });
+  }
+  const tanggal = data.tanggal;
+  simpanBelakang('ttd', nama, () => panggilUlang('ubahTtd', { token: admin.token, tanggal, foto: xs.map(x => x.foto), nilai }));
+}
+// Rekap diambil segar dari server sesudah semua perubahan tersimpan, supaya berkas sama dengan Sheet.
+$('unduh-rekap').addEventListener('click', async () => {
+  const b = $('unduh-rekap');
+  b.disabled = true;
+  b.setAttribute('aria-busy', 'true');
+  b.textContent = 'Menyiapkan…';
+  try {
+    await Promise.allSettled([...antreUbah.values()]);
+    const r = periksa(await panggilUlang('dataHari', { token: admin.token, tanggal: $('tanggal').value }));
+    if (!r) return;
+    if (r.tolak) return beriTahu(r.tolak);
+    if (!r.sesi.length) return beriTahu('Belum ada sesi kuliah yang dibuka pada tanggal ini.');
+    const { nama, lembar } = isiRekap(r, $('kelas').value);
+    const url = URL.createObjectURL(new Blob([berkasXlsx(lembar)],
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: nama });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    beriTahu(`Rekap diunduh: ${nama}`);
+  } catch (e) {
+    beriTahu('Rekap gagal dibuat. Periksa sinyal lalu coba lagi.');
+  } finally {
+    b.disabled = false;
+    b.removeAttribute('aria-busy');
+    b.textContent = 'Unduh rekap';
+  }
+});
+$('ttd-semua').addEventListener('click', () => { const xs = calonTtd(); if (xs.length) ubahTtdKlik(xs, 'YA'); });
+// Yang tampil di tab Sudah presensi, belum dicek TTD-nya, dan tidak ditolak.
+const calonTtd = () => data.hadir.filter(x => cocok(x) && x.verifikasi !== 'TOLAK' && !x.ttd);
 
 function ubahIzinKlik(x, nilai, catatan, diam) {
   ubahanKe++;
@@ -1388,6 +1454,160 @@ function karet(g) {
 document.querySelectorAll('.pilihan').forEach(karet);
 
 if (admin) bukaPanel(); else muatAkun();
+</script>
+<script id="rekap-xlsx">
+// Berkas rekap .xlsx tanpa pustaka: beberapa XML di dalam zip tanpa kompresi. Fungsi murni, diuji di tests/rekap.test.js.
+const BULAN_REKAP = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
+const HARI_REKAP = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+const KEPALA_REKAP = ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH (KAPITAL)', 'KELAS', 'PRESENSI', 'BUKTI TIMESTAMP (1:1)', 'KETERANGAN'];
+const LEBAR_REKAP = [9.63, 32, 18.88, 23.88, 9, 13, 23.13, 30];
+const tautanDrive = id => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
+
+// Isi tiap sheet dari jawaban dataHari: satu baris per mahasiswa aktif, status dari server (sama dengan menu Rekap).
+function isiRekap(d, kelas) {
+  const mhs = d.rekap.filter(m => !kelas || m.kelas === kelas);
+  const [y, b, h] = d.tanggal.split('-').map(Number);
+  const hari = HARI_REKAP[new Date(Date.UTC(y, b - 1, h)).getUTCDay()];
+  const siapa = kelas ? 'KELAS ' + kelas : 'SEMUA KELAS';
+  const lembar = d.sesi.map((s, i) => {
+    const n = { HADIR: 0, TERLAMBAT: 0, IZIN: 0, ALFA: 0 };
+    const baris = mhs.map((m, no) => {
+      const st = m.tiap[i];
+      n[st]++;
+      const kiriman = d.hadir.filter(x => x.nim === m.nim && x.sesi === s);
+      let bukti = '-', ket = st;
+      if (st === 'HADIR' || st === 'TERLAMBAT') {
+        const x = kiriman.find(k => k.verifikasi !== 'TOLAK');
+        bukti = { teks: x.jam, url: tautanDrive(x.foto) };
+        ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
+      } else if (st === 'IZIN') {
+        const z = d.pengajuan.find(z => z.nim === m.nim && z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
+          (z.cakupan === 'SEHARI' || z.cakupan === s));
+        if (z && z.bukti.length) bukti = { teks: 'Bukti izin', url: tautanDrive(z.bukti[0]) };
+        ket = z ? `IZIN: ${z.jenis}` + (z.catatan ? `; ${z.catatan}` : '') : 'IZIN';
+      } else {
+        const x = kiriman.find(k => k.verifikasi === 'TOLAK');
+        if (x) { bukti = { teks: x.jam, url: tautanDrive(x.foto) }; ket = 'ALFA: presensi ditolak'; }
+      }
+      return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, bukti, ket];
+    });
+    return {
+      nama: s,
+      judul: `PRESENSI JAM KAMPUS ${s} ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
+      baris,
+      ringkas: `Hadir ${n.HADIR}, Terlambat ${n.TERLAMBAT}, Izin ${n.IZIN}, Alfa ${n.ALFA}, dari ${mhs.length} mahasiswa`,
+    };
+  });
+  return { nama: `PRESENSI JAM KAMPUS ${siapa} ${h} ${BULAN_REKAP[b - 1].slice(0, 3)} ${y}.xlsx`, lembar };
+}
+
+const xmlAman = v => String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+  .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const kolomHuruf = i => String.fromCharCode(65 + i);
+
+// Gaya: 1 judul tebal di tengah, 2 kepala tebal berbingkai, 3 isi berbingkai, 4 tautan berbingkai.
+const GAYA_REKAP = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+  '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+  '<font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Calibri"/></font></fonts>' +
+  '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+  '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
+  '<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>' +
+  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+  '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>' +
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/></cellXfs>' +
+  '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+function xmlLembar(l) {
+  const tautan = [];
+  const sel = (ref, v, gaya) => {
+    if (v && typeof v === 'object') { tautan.push([ref, v.url]); return sel(ref, v.teks, 4); }
+    return typeof v === 'number'
+      ? `<c r="${ref}" s="${gaya}"><v>${v}</v></c>`
+      : `<c r="${ref}" s="${gaya}" t="inlineStr"><is><t xml:space="preserve">${xmlAman(v)}</t></is></c>`;
+  };
+  const baris = (r, isi, gaya) => `<row r="${r}">${isi.map((v, i) => sel(kolomHuruf(i) + r, v, gaya)).join('')}</row>`;
+  const rows = [baris(1, [l.judul], 1), baris(2, KEPALA_REKAP, 2), ...l.baris.map((b, i) => baris(i + 3, b, 3)),
+    baris(l.baris.length + 4, [l.ringkas], 0)];
+  const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    `<cols>${LEBAR_REKAP.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` +
+    `<sheetData>${rows.join('')}</sheetData><mergeCells count="1"><mergeCell ref="A1:H1"/></mergeCells>` +
+    (tautan.length ? `<hyperlinks>${tautan.map(([ref], i) => `<hyperlink ref="${ref}" r:id="rId${i + 1}"/>`).join('')}</hyperlinks>` : '') +
+    '</worksheet>';
+  const rels = tautan.length ? '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    tautan.map(([, url], i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xmlAman(url)}" TargetMode="External"/>`).join('') +
+    '</Relationships>' : null;
+  return { xml, rels };
+}
+
+function berkasXlsx(lembar) {
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const kepala = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const berkas = [
+    ['[Content_Types].xml', kepala + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      lembar.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+      '</Types>'],
+    ['_rels/.rels', kepala + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      `<Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', kepala + `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${R}"><sheets>` +
+      lembar.map((l, i) => `<sheet name="${xmlAman(l.nama)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', kepala + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      lembar.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${R}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+      `<Relationship Id="rId${lembar.length + 1}" Type="${R}/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml', GAYA_REKAP],
+  ];
+  lembar.forEach((l, i) => {
+    const { xml, rels } = xmlLembar(l);
+    berkas.push([`xl/worksheets/sheet${i + 1}.xml`, xml]);
+    if (rels) berkas.push([`xl/worksheets/_rels/sheet${i + 1}.xml.rels`, rels]);
+  });
+  return zipTanpaKompresi(berkas);
+}
+
+const TABEL_CRC = Array.from({ length: 256 }, (_, n) => {
+  for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
+  return n >>> 0;
+});
+function crc32(b) {
+  let c = 0xffffffff;
+  for (const x of b) c = TABEL_CRC[(c ^ x) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// Zip "stored": tiap berkas = kepala lokal + isi; lalu direktori pusat dan penutup. Tanggal berkas 1 Jan 1980.
+function zipTanpaKompresi(berkas) {
+  const enc = new TextEncoder();
+  const tulis = (besar, isian) => {
+    const v = new DataView(new ArrayBuffer(besar));
+    for (const [o, x, l] of isian) l === 4 ? v.setUint32(o, x, true) : v.setUint16(o, x, true);
+    return new Uint8Array(v.buffer);
+  };
+  const bagian = [], pusat = [];
+  let posisi = 0;
+  for (const [nama, teks] of berkas) {
+    const n = enc.encode(nama), isi = enc.encode(teks), crc = crc32(isi);
+    bagian.push(tulis(30, [[0, 0x04034b50, 4], [4, 20, 2], [12, 0x21, 2], [14, crc, 4], [18, isi.length, 4], [22, isi.length, 4], [26, n.length, 2]]), n, isi);
+    pusat.push(tulis(46, [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [14, 0x21, 2], [16, crc, 4], [20, isi.length, 4], [24, isi.length, 4],
+      [28, n.length, 2], [42, posisi, 4]]), n);
+    posisi += 30 + n.length + isi.length;
+  }
+  const besarPusat = pusat.reduce((a, x) => a + x.length, 0);
+  const semua = [...bagian, ...pusat,
+    tulis(22, [[0, 0x06054b50, 4], [8, berkas.length, 2], [10, berkas.length, 2], [12, besarPusat, 4], [16, posisi, 4]])];
+  const hasil = new Uint8Array(semua.reduce((a, x) => a + x.length, 0));
+  let o = 0;
+  for (const x of semua) { hasil.set(x, o); o += x.length; }
+  return hasil;
+}
 </script>
 <!-- Sesudah skrip, agar server font yang lambat tidak menahan halaman. -->
 <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=chillax@500,600&amp;display=swap">
