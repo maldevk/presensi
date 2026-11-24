@@ -123,6 +123,9 @@ input[type="date"] { padding-inline: var(--space-sm); }
   border-radius: var(--radius-input); background: var(--color-paper-2);
   touch-action: pan-y; user-select: none; -webkit-user-select: none;
   contain: layout; /* jempol berubah ukuran tiap frame; susun ulang cukup di dalam grup ini, bukan seluruh halaman */
+  /* Lapisan sendiri: bayangan jempol melebar keluar grup ke kartu form yang bertekstur noise SVG. Tanpa ini, tiap
+     frame animasi menggambar ulang tekstur itu, dan di ponsel halaman jadi berat dan sulit di-scroll. */
+  will-change: transform;
 }
 .mode button {
   position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;
