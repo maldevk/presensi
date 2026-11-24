@@ -265,6 +265,32 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
   .pilihan button[aria-pressed="false"]:active, .aksi button:active, .btn-tipis:active { scale: none; }
   .aksi button, .btn-tipis { transition: none; }
 }
+/* Tur singkat (salinan sama di index.html dan admin.html; ubah keduanya). Dialog selebar layar menahan klik,
+   sorotan berbayang besar meredupkan sisa halaman, kartu di bawah atau di atas bagian yang dijelaskan. */
+#tur { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; color: var(--color-ink); }
+#tur::backdrop { background: none; }
+#tur[open] { transition: opacity 200ms var(--ease-snap); }
+@starting-style { #tur[open] { opacity: 0; } }
+.tur-sorot { position: fixed; border-radius: var(--radius-stock); box-shadow: 0 0 0 100vmax oklch(20% 0.014 255 / 0.55);
+  outline: 3px solid var(--color-accent); pointer-events: none;
+  transition: left 250ms var(--ease-snap), top 250ms var(--ease-snap), width 250ms var(--ease-snap), height 250ms var(--ease-snap); }
+.tur-kartu { position: fixed; width: min(22rem, calc(100vw - 2 * var(--space-md))); padding: var(--space-md);
+  border-radius: var(--radius-stock); background: var(--color-card); box-shadow: var(--shadow-card); }
+.tur-ke { margin: 0; color: var(--color-muted); font-size: var(--text-xs); }
+#tur-judul { margin: var(--space-2xs) 0 var(--space-xs); font-size: var(--text-lg); line-height: 1.3; }
+.tur-teks p { margin: 0 0 var(--space-xs); }
+.tur-tombol { display: flex; gap: var(--space-xs); margin-top: var(--space-sm); }
+.tur-tombol button { min-height: 44px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: 999px;
+  background: var(--color-card); color: inherit; font: inherit; font-weight: 600; }
+.tur-tombol .tur-lewati { margin-right: auto; padding-inline: var(--space-xs); border-color: transparent; background: none; color: var(--color-muted); }
+.tur-tombol .tur-lanjut { border-color: transparent; background: var(--color-accent); color: var(--color-accent-ink); }
+.tur-contoh { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs); margin: var(--space-xs) 0; }
+.tur-contoh figure { margin: 0; font-size: var(--text-xs); text-align: center; }
+.tur-contoh svg { display: block; width: 100%; max-width: 7rem; margin: 0 auto var(--space-2xs); }
+@media (prefers-reduced-motion: reduce) { #tur[open], .tur-sorot { transition: none; } }
+.ajak-latihan { display: grid; gap: var(--space-xs); justify-items: start; margin-top: var(--space-md); color: var(--color-muted); }
+.ajak-latihan p { margin: 0; }
 </style>
 </head>
 <body>
@@ -288,12 +314,16 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
       <div id="pesan-masuk" class="pesan" role="alert" hidden></div>
       <button id="tombol-masuk" class="btn" type="submit">Masuk ke panel</button>
     </form>
+    <div class="ajak-latihan">
+      <p>Baru pertama kali? Berlatih dulu dengan data palsu, tanpa akun. Tidak ada yang tersimpan ke Sheet.</p>
+      <button type="button" id="mulai-latihan" class="btn-tipis">Coba mode latihan</button>
+    </div>
   </section>
 
   <section id="layar-panel" hidden aria-labelledby="judul-panel">
     <div class="kepala">
       <h1 id="judul-panel">Presensi harian</h1>
-      <div class="akun">Masuk sebagai <strong id="nama-akun"></strong> <button id="keluar" class="btn-tipis" type="button">Keluar</button></div>
+      <div class="akun">Masuk sebagai <strong id="nama-akun"></strong> <button id="buka-tur" class="btn-tipis" type="button">Cara pakai</button> <button id="keluar" class="btn-tipis" type="button">Keluar</button></div>
     </div>
     <div id="pilih-layar" class="pilihan" role="group" aria-label="Halaman panel" hidden>
       <button type="button" id="layar-harian" aria-pressed="true">Presensi harian</button>
@@ -430,7 +460,10 @@ const SERVER = 'https://script.google.com/macros/s/AKfycbyF3LUQ9LupXpmlom3z88jIX
 const BATAS_PERCOBAAN_MS = 60000;
 const NAMA_SESI = { PAGI: 'Pagi', SORE: 'Sore' };
 
+// Mode latihan (latihan.js): semua permintaan dijawab server palsu di memori, tidak ada yang ke jaringan.
+let latihan = null;
 async function panggil(fn, ...arg) {
+  if (latihan) return latihan.panggil(fn, arg[0]);
   const batal = new AbortController();
   const jam = setTimeout(() => batal.abort(), BATAS_PERCOBAAN_MS);
   try {
@@ -524,6 +557,7 @@ function masuk(wadah) {
 }
 
 function keLayarMasuk(pesan) {
+  if (latihan) { latihan.berhenti(); latihan = null; }
   admin = null;
   simpan.taruh(null);
   data = null; // akun berikutnya tidak melihat daftar akun sebelumnya selama memuat
@@ -601,9 +635,48 @@ function bukaPanel() {
   $('nama-akun').textContent = admin.username;
   $('pilih-layar').hidden = admin.akses !== 'UTAMA';
   if (!$('tanggal').value) $('tanggal').value = hariIni();
-  muatData();
+  // Tur sesudah daftar pertama tampil: selalu di mode latihan, sekali per akun di panel asli.
+  muatData().then(() => {
+    if (!admin) return; // sudah keluar sebelum daftar tampil
+    if (latihan) turPanel(true);
+    else if (!turDilihat.sudah('turAdmin:' + admin.username)) turPanel(false);
+  });
   jadwalkanPerbarui();
 }
+
+$('mulai-latihan').addEventListener('click', async () => {
+  const b = $('mulai-latihan');
+  b.disabled = true;
+  b.textContent = 'Memuat latihan…';
+  try {
+    if (!window.Latihan) {
+      await new Promise((ok, gagal) => document.head.append(Object.assign(document.createElement('script'), { src: 'latihan.js', onload: ok, onerror: gagal })));
+    }
+    // Tanpa simpan.taruh: muat ulang halaman selalu kembali ke layar masuk, bukan ke latihan.
+    latihan = Latihan.mulai({ muatUlang: () => muatData(), keluar: () => $('keluar').click() });
+    admin = { username: 'LATIHAN', token: 'latihan', akses: 'LATIHAN' };
+    tampil($('pesan-masuk'), '');
+    $('tanggal').value = hariIni();
+    bukaPanel();
+  } catch (e) {
+    tampil($('pesan-masuk'), 'Mode latihan gagal dimuat. Periksa sinyal lalu coba lagi.');
+  } finally {
+    b.disabled = false;
+    b.textContent = 'Coba mode latihan';
+  }
+});
+
+function turPanel(modeLatihan) {
+  tur([
+    { el: '.saring', judul: 'Pilih tanggal dan kelas', teks: '<p>Daftar menampilkan presensi pada tanggal ini. Admin kelas hanya melihat kelasnya sendiri. Daftar hari ini diperbarui sendiri tiap 30 detik.</p>' },
+    { el: '.pilihan[aria-label="Daftar"]', judul: 'Sudah, Belum, dan Izin', teks: '<p><b>Sudah presensi</b>: periksa foto tiap mahasiswa. <b>Belum presensi</b>: yang belum mengirim. <b>Izin</b>: pengajuan izin yang perlu Anda setujui atau tolak.</p>' },
+    { el: '#daftar > li.baris:not(.kerangka)', judul: 'Periksa tiap baris', teks: '<p>Ketuk foto untuk memperbesar. Tekan <b>Sah</b> bila wajah, kartu identitas, dan jam Timemark terlihat. Tekan <b>Tolak</b> bila tidak, maka mahasiswa tercatat alfa.</p><p><b>TTD</b> untuk tanda tangan di daftar hadir kertas. Salah tekan? Tekan <b>Batalkan</b> di pemberitahuan bawah.</p>' },
+    { el: '#unduh-rekap', judul: 'Unduh rekap harian', teks: '<p>Berkas Excel berisi lembar per sesi dan lembar IZIN, siap dicetak di A4.</p>' + (modeLatihan
+      ? '<p>Sekarang kerjakan <b>Tugas latihan</b> di bagian atas. Tiap tugas tercentang sendiri.</p>'
+      : '<p>Ingin berlatih dulu? Tekan <b>Keluar</b>, lalu <b>Coba mode latihan</b> di layar masuk.</p>') },
+  ], () => { if (!modeLatihan) turDilihat.tandai('turAdmin:' + admin.username); });
+}
+$('buka-tur').addEventListener('click', () => turPanel(!!latihan));
 
 let urutMuat = 0, memuat = false;
 let ubahanKe = 0; // naik setiap admin menekan Sah/Tolak, untuk membuang jawaban server yang lebih tua dari pilihan itu
@@ -915,33 +988,25 @@ function ubahTtdKlik(xs, nilai, diam) {
   const tanggal = data.tanggal;
   simpanBelakang('ttd', nama, () => panggilUlang('ubahTtd', { token: admin.token, tanggal, foto: xs.map(x => x.foto), nilai }));
 }
-// Foto untuk rekap: versi kecil dari Drive (memakai yang sudah dimuat daftar), tiga sekaligus supaya jatah
-// eksekusi serentak tetap tersisa untuk mahasiswa. Tiap kunci = ID foto dipisah koma (bukti izin bisa 2-3 foto);
-// semua digabung menjadi satu JPEG persegi 320 px, tiap foto utuh di petaknya.
-const PETAK_REKAP = { 1: [[0, 0, 320, 320]], 2: [[0, 0, 160, 320], [160, 0, 160, 320]], 3: [[0, 0, 160, 160], [160, 0, 160, 160], [80, 160, 160, 160]] };
-async function fotoRekap(kunci, kemajuan) {
+// Foto untuk rekap, tiga sekaligus supaya jatah eksekusi serentak tetap tersisa untuk mahasiswa. Tiap foto utuh
+// di tengah JPEG persegi berlatar putih: foto presensi dari versi kecil Drive (memakai yang sudah dimuat daftar),
+// bukti izin (id di besar) dari berkas asli dan lebih tajam supaya tulisan surat terbaca saat dicetak.
+async function fotoRekap(kunci, besar, kemajuan) {
   const hasil = new Map(), antre = [...kunci];
   let selesai = 0;
-  const muat = async f => {
-    const img = new Image();
-    img.src = fotoKecil.get(f) || await ambilFoto(f, false);
-    await img.decode();
-    return img;
-  };
   const kerja = async () => {
     for (let kn; (kn = antre.shift());) {
       try {
-        const img = (await Promise.allSettled(kn.split(',').map(muat))).filter(x => x.status === 'fulfilled').map(x => x.value);
-        if (!img.length) throw new Error('tidak ada foto');
-        const k = Object.assign(document.createElement('canvas'), { width: 320, height: 320 });
+        const img = new Image(), sisi = besar.has(kn) ? 800 : 320;
+        img.src = (!besar.has(kn) && fotoKecil.get(kn)) || await ambilFoto(kn, besar.has(kn));
+        await img.decode();
+        const k = Object.assign(document.createElement('canvas'), { width: sisi, height: sisi });
         const c = k.getContext('2d');
         c.fillStyle = '#fff';
-        c.fillRect(0, 0, 320, 320);
-        PETAK_REKAP[Math.min(img.length, 3)].forEach(([x, y, pw, ph], i) => {
-          const skala = Math.min((pw - 4) / img[i].naturalWidth, (ph - 4) / img[i].naturalHeight);
-          const w = img[i].naturalWidth * skala, h = img[i].naturalHeight * skala;
-          c.drawImage(img[i], x + (pw - w) / 2, y + (ph - h) / 2, w, h);
-        });
+        c.fillRect(0, 0, sisi, sisi);
+        const skala = Math.min((sisi - 4) / img.naturalWidth, (sisi - 4) / img.naturalHeight);
+        const w = img.naturalWidth * skala, h = img.naturalHeight * skala;
+        c.drawImage(img, (sisi - w) / 2, (sisi - h) / 2, w, h);
         const blob = await new Promise(ok => k.toBlob(ok, 'image/jpeg', 0.85));
         hasil.set(kn, new Uint8Array(await blob.arrayBuffer()));
       } catch (e) { /* bukti ini tampil sebagai tautan saja */ }
@@ -964,9 +1029,11 @@ $('unduh-rekap').addEventListener('click', async () => {
     if (!r) return;
     if (r.tolak) return beriTahu(r.tolak);
     if (!r.sesi.length) return beriTahu('Belum ada sesi kuliah yang dibuka pada tanggal ini.');
-    const { nama, lembar } = isiRekap(r, $('kelas').value);
-    const id = [...new Set(lembar.flatMap(l => l.baris.map(x => x[6].foto).filter(Boolean)))];
-    const gambar = await fotoRekap(id, (n) => { b.textContent = `Mengambil foto ${n}/${id.length}…`; });
+    const { nama: berkas, lembar } = isiRekap(r, $('kelas').value);
+    const nama = (latihan ? 'LATIHAN ' : '') + berkas; // berkas latihan tidak tertukar dengan rekap asli
+    const fotoDi = l => l.baris.flatMap(x => x.filter(v => v && v.foto).map(v => v.foto));
+    const id = [...new Set(lembar.flatMap(fotoDi))];
+    const gambar = await fotoRekap(id, new Set(fotoDi(lembar.find(l => l.nama === 'IZIN'))), (n) => { b.textContent = `Mengambil foto ${n}/${id.length}…`; });
     const url = URL.createObjectURL(new Blob([berkasXlsx(lembar, gambar)],
       { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: nama });
@@ -1560,18 +1627,85 @@ document.querySelectorAll('.pilihan').forEach(karet);
 
 if (admin) bukaPanel(); else muatAkun();
 </script>
+<script id="tur-skrip">
+// Tur singkat (salinan sama di index.html dan admin.html; ubah keduanya). langkah: [{ el, judul, teks }],
+// teks berupa HTML dari kode ini sendiri. Langkah yang bagiannya tidak tampil dilewati. Esc = Lewati.
+function tur(langkah, selesai) {
+  const ada = l => { const e = document.querySelector(l.el); return e && e.getClientRects().length; };
+  langkah = langkah.filter(ada);
+  if (!langkah.length || document.getElementById('tur')) return;
+  const asal = document.activeElement;
+  const d = document.createElement('dialog');
+  d.id = 'tur';
+  d.setAttribute('aria-labelledby', 'tur-judul');
+  d.innerHTML = '<div class="tur-sorot"></div><div class="tur-kartu"><div aria-live="polite"><p class="tur-ke"></p><h2 id="tur-judul"></h2>' +
+    '<div class="tur-teks"></div></div><div class="tur-tombol"><button type="button" class="tur-lewati">Lewati</button>' +
+    '<button type="button" class="tur-kembali">Kembali</button><button type="button" class="tur-lanjut">Lanjut</button></div></div>';
+  document.body.append(d);
+  const q = s => d.querySelector(s);
+  let i = 0, target = null;
+  const letak = () => {
+    const r = target.getBoundingClientRect(), k = q('.tur-kartu'), pad = 6, jarak = 12;
+    Object.assign(q('.tur-sorot').style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + 2 * pad + 'px', height: r.height + 2 * pad + 'px' });
+    const bawah = r.bottom + pad + jarak;
+    k.style.top = (bawah + k.offsetHeight <= innerHeight - 8 ? bawah : Math.max(8, r.top - pad - jarak - k.offsetHeight)) + 'px';
+    k.style.left = Math.min(Math.max(16, r.left), innerWidth - k.offsetWidth - 16) + 'px';
+  };
+  const tampil = () => {
+    const l = langkah[i];
+    target = document.querySelector(l.el);
+    q('.tur-ke').textContent = `Langkah ${i + 1} dari ${langkah.length}`;
+    q('#tur-judul').textContent = l.judul;
+    q('.tur-teks').innerHTML = l.teks;
+    q('.tur-kembali').hidden = i === 0;
+    q('.tur-lanjut').textContent = i === langkah.length - 1 ? 'Selesai' : 'Lanjut';
+    // Bagian yang dijelaskan ke dekat atas layar, supaya kartu muat di bawahnya walau bagiannya tinggi.
+    target.scrollIntoView({ block: 'start' });
+    scrollBy(0, -24);
+    letak();
+    q('.tur-lanjut').focus();
+  };
+  const tutup = () => {
+    removeEventListener('resize', letak);
+    removeEventListener('scroll', letak, true);
+    d.close();
+    d.remove();
+    if (asal && asal.isConnected) asal.focus({ preventScroll: true });
+    if (selesai) selesai();
+  };
+  q('.tur-lanjut').addEventListener('click', () => { if (i < langkah.length - 1) { i++; tampil(); } else tutup(); });
+  q('.tur-kembali').addEventListener('click', () => { i--; tampil(); });
+  q('.tur-lewati').addEventListener('click', tutup);
+  d.addEventListener('cancel', e => { e.preventDefault(); tutup(); });
+  addEventListener('resize', letak);
+  addEventListener('scroll', letak, true);
+  d.showModal();
+  tampil();
+}
+// Tanda "sudah melihat tur" di perangkat ini; penyimpanan bisa diblokir, jadi selalu dibungkus.
+const turDilihat = {
+  sudah(k) { try { return localStorage.getItem(k) === '1'; } catch (e) { return true; } },
+  tandai(k) { try { localStorage.setItem(k, '1'); } catch (e) { /* tur muncul lagi lain kali, tidak apa-apa */ } },
+};
+</script>
 <script id="rekap-xlsx">
 // Berkas rekap .xlsx tanpa pustaka: beberapa XML dan foto JPEG di dalam zip tanpa kompresi.
 // Fungsi murni (foto diberikan sebagai byte), diuji di tests/rekap.test.js.
 const BULAN_REKAP = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER'];
 const HARI_REKAP = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-const KEPALA_REKAP = ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH (KAPITAL)', 'KELAS', 'PRESENSI', 'BUKTI TIMESTAMP (1:1)', 'KETERANGAN'];
-// Lebar kolom (karakter) dipilih agar A4 tegak muat selebar halaman tanpa mengecilkan foto terlalu jauh.
-// Lebar kolom (karakter) dipilih agar A4 tegak muat selebar halaman. Kolom G cukup untuk foto persegi FOTO_PT.
-const LEBAR_REKAP = [5, 28, 16, 16, 7, 12, 17, 24];
-// Semua baris data sama tinggi seperti rekap manual; foto persegi di tengah sel G. Satuan point (1 pt = 12700 EMU).
-const TINGGI_BARIS_PT = 90;
-const FOTO_PT = 80;
+// Tata letak tiap jenis lembar. lebar: karakter per kolom; tinggi dan foto: point (semua baris data sama tinggi,
+// foto persegi di tengah selnya); kiri: kolom rata kiri.
+// Lembar sesi: A4 tegak seperti rekap manual. Lembar IZIN: A4 mendatar, foto bukti dokumen lebih besar supaya terbaca.
+const TATA_REKAP = {
+  kepala: ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH (KAPITAL)', 'KELAS', 'PRESENSI', 'BUKTI TIMESTAMP (1:1)', 'KETERANGAN'],
+  lebar: [5, 28, 16, 16, 7, 12, 17, 24], tinggi: 90, foto: 80, kiri: [1], arah: 'portrait',
+};
+const TATA_IZIN = {
+  kepala: ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'KELAS', 'JENIS & WAKTU IZIN', 'ALASAN & CATATAN', 'STATUS', 'BUKTI 1', 'BUKTI 2', 'BUKTI 3'],
+  lebar: [5, 24, 16, 7, 18, 30, 13, 26, 26, 26], tinggi: 140, foto: 130, kiri: [1, 4, 5], arah: 'landscape',
+};
+const CAKUPAN_REKAP = { SEHARI: 'Sehari penuh', PAGI: 'Setengah hari pagi', SORE: 'Setengah hari sore' };
+const STATUS_IZIN_REKAP = { OK: 'DISETUJUI', BELUM: 'BELUM DIPERIKSA' };
 const tautanDrive = id => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
 
 // Isi tiap sheet dari jawaban dataHari: satu baris per mahasiswa aktif, status dari server (sama dengan menu Rekap).
@@ -1580,8 +1714,10 @@ function isiRekap(d, kelas) {
   const [y, b, h] = d.tanggal.split('-').map(Number);
   const hari = HARI_REKAP[new Date(Date.UTC(y, b - 1, h)).getUTCDay()];
   const siapa = kelas ? 'KELAS ' + kelas : 'SEMUA KELAS';
-  // foto = ID dipisah koma; bukti izin 2-3 foto menjadi satu kolase di sel G, tautan cadangan ke foto pertama.
-  const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto[0]), foto: foto.join(',') });
+  const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto), foto });
+  // Izin yang berlaku hari ini (yang ditolak tidak dihitung, mahasiswanya alfa), untuk lembar sesi dan lembar IZIN.
+  const izin = d.pengajuan.filter(z => z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
+    (!kelas || z.kelas === kelas) && (z.cakupan === 'SEHARI' || d.sesi.includes(z.cakupan)));
   const lembar = d.sesi.map((s, i) => {
     const n = { HADIR: 0, TERLAMBAT: 0, IZIN: 0, ALFA: 0 };
     const baris = mhs.map((m, no) => {
@@ -1591,25 +1727,37 @@ function isiRekap(d, kelas) {
       let g = '-', ket = st;
       if (st === 'HADIR' || st === 'TERLAMBAT') {
         const x = kiriman.find(k => k.verifikasi !== 'TOLAK');
-        g = bukti(x.jam, [x.foto]);
+        g = bukti(x.jam, x.foto);
         ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
       } else if (st === 'IZIN') {
-        const z = d.pengajuan.find(z => z.nim === m.nim && z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
-          (z.cakupan === 'SEHARI' || z.cakupan === s));
-        if (z && z.bukti.length) g = bukti('Bukti izin', z.bukti);
+        const z = izin.find(z => z.nim === m.nim && (z.cakupan === 'SEHARI' || z.cakupan === s));
+        if (z) g = 'Lihat lembar IZIN';
         ket = z ? `IZIN: ${z.jenis}` + (z.catatan ? `; ${z.catatan}` : '') : 'IZIN';
       } else {
         const x = kiriman.find(k => k.verifikasi === 'TOLAK');
-        if (x) { g = bukti(x.jam, [x.foto]); ket = 'ALFA: presensi ditolak'; }
+        if (x) { g = bukti(x.jam, x.foto); ket = 'ALFA: presensi ditolak'; }
       }
       return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, g, ket];
     });
     return {
-      nama: s,
+      nama: s, tata: TATA_REKAP,
       judul: `PRESENSI JAM KAMPUS ${s} ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
       baris,
       ringkas: `Hadir ${n.HADIR}, Terlambat ${n.TERLAMBAT}, Izin ${n.IZIN}, Alfa ${n.ALFA}, dari ${mhs.length} mahasiswa`,
     };
+  });
+  // Lembar IZIN: satu baris per pengajuan, tiap foto bukti di selnya sendiri.
+  const tgl = t => { const [ty, tb, th] = t.split('-').map(Number); return `${th} ${BULAN_REKAP[tb - 1].slice(0, 3)} ${ty}`; };
+  const urut = izin.slice().sort((p, q) => p.kelas.localeCompare(q.kelas) || p.nama.localeCompare(q.nama));
+  const disetujui = urut.filter(z => z.status === 'OK').length;
+  lembar.push({
+    nama: 'IZIN', tata: TATA_IZIN,
+    judul: `REKAP IZIN ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
+    baris: urut.map((z, no) => [no + 1, z.nama.toUpperCase(), z.nim, z.kelas,
+      `${z.jenis}\n${CAKUPAN_REKAP[z.cakupan] || z.cakupan}\n${z.mulai === z.selesai ? tgl(z.mulai) : tgl(z.mulai) + ' s.d. ' + tgl(z.selesai)}`,
+      z.alasan + (z.catatan ? `\nCatatan admin: ${z.catatan}` : ''), STATUS_IZIN_REKAP[z.status] || z.status,
+      ...[0, 1, 2].map(i => z.bukti[i] ? bukti(`Bukti ${i + 1}`, z.bukti[i]) : '')]),
+    ringkas: urut.length ? `${urut.length} izin: ${disetujui} disetujui, ${urut.length - disetujui} belum diperiksa` : 'Tidak ada izin pada tanggal ini.',
   });
   return { nama: `PRESENSI JAM KAMPUS ${siapa} ${h} ${BULAN_REKAP[b - 1].slice(0, 3)} ${y}.xlsx`, lembar };
 }
@@ -1644,8 +1792,8 @@ const GAYA_REKAP = XML + '<styleSheet xmlns="http://schemas.openxmlformats.org/s
 
 // Satu sheet. gambar: Map id foto -> byte JPEG; foto yang tidak ada tetap tampil sebagai tautan saja.
 function xmlLembar(l, gambar, nomor) {
-  const tautan = [], foto = [];
-  // Bukti berfoto: sel G kosong dan foto di atasnya. Bila foto gagal dimuat: jam atau "Bukti izin" bertaut ke Drive.
+  const tautan = [], foto = [], t = l.tata, akhir = kolomHuruf(t.kepala.length - 1);
+  // Bukti berfoto: selnya kosong dan foto di atasnya. Bila foto gagal dimuat: jam atau "Bukti n" bertaut ke Drive.
   const sel = (ref, v, gaya) => {
     if (v && typeof v === 'object') {
       if (gambar.has(v.foto)) { foto.push([ref, v.foto]); return `<c r="${ref}" s="${gaya}"/>`; }
@@ -1657,8 +1805,8 @@ function xmlLembar(l, gambar, nomor) {
       : `<c r="${ref}" s="${gaya}" t="inlineStr"><is><t xml:space="preserve">${xmlAman(v)}</t></is></c>`;
   };
   const baris = (r, isi, gaya, tinggi) => `<row r="${r}"${tinggi ? ` ht="${tinggi}" customHeight="1"` : ''}>` +
-    isi.map((v, i) => sel(kolomHuruf(i) + r, v, gaya === 3 && i === 1 ? 5 : gaya)).join('') + '</row>';
-  const rows = [baris(1, [l.judul], 1, 24), baris(2, KEPALA_REKAP, 2, 32), ...l.baris.map((b, i) => baris(i + 3, b, 3, TINGGI_BARIS_PT)),
+    isi.map((v, i) => sel(kolomHuruf(i) + r, v, gaya === 3 && t.kiri.includes(i) ? 5 : gaya)).join('') + '</row>';
+  const rows = [baris(1, [l.judul], 1, 24), baris(2, t.kepala, 2, 32), ...l.baris.map((b, i) => baris(i + 3, b, 3, t.tinggi)),
     baris(l.baris.length + 4, [l.ringkas], 0)];
   const rels = tautan.map(([, url], i) => [`rId${i + 1}`, 'hyperlink', url, true]);
   const idGambar = `rId${tautan.length + 1}`;
@@ -1666,37 +1814,37 @@ function xmlLembar(l, gambar, nomor) {
   const xml = XML +
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${NS_R}">` +
     '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>' +
-    `<cols>${LEBAR_REKAP.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` +
-    `<sheetData>${rows.join('')}</sheetData><mergeCells count="1"><mergeCell ref="A1:H1"/></mergeCells>` +
+    `<cols>${t.lebar.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` +
+    `<sheetData>${rows.join('')}</sheetData><mergeCells count="1"><mergeCell ref="A1:${akhir}1"/></mergeCells>` +
     (tautan.length ? `<hyperlinks>${tautan.map(([ref], i) => `<hyperlink ref="${ref}" r:id="rId${i + 1}"/>`).join('')}</hyperlinks>` : '') +
     '<printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
-    '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' +
+    `<pageSetup paperSize="9" orientation="${t.arah}" fitToWidth="1" fitToHeight="0"/>` +
     // NIM sengaja teks; tanpa ini Excel menandai setiap sel NIM dengan segitiga hijau.
-    `<ignoredErrors><ignoredError sqref="C3:C${l.baris.length + 2}" numberStoredAsText="1"/></ignoredErrors>` +
+    (l.baris.length ? `<ignoredErrors><ignoredError sqref="C3:C${l.baris.length + 2}" numberStoredAsText="1"/></ignoredErrors>` : '') +
     (foto.length ? `<drawing r:id="${idGambar}"/>` : '') + '</worksheet>';
   return { xml, rels, foto };
 }
 
-// Foto ditambatkan ke dua sudut di dalam sel G barisnya (twoCellAnchor), jadi posisinya dihitung dari sel itu
-// dan tidak meluber ke baris lain. Ukuran sel G: lebar kolom 17 karakter (±93 pt) x TINGGI_BARIS_PT.
-function xmlGambar(foto, nomorAwal) {
-  const pt = n => Math.round(n * 12700);
-  const kiri = 6, atas = (TINGGI_BARIS_PT - FOTO_PT) / 2;
-  const sudut = (tag, r, x, y) => `<xdr:${tag}><xdr:col>6</xdr:col><xdr:colOff>${pt(x)}</xdr:colOff><xdr:row>${r}</xdr:row><xdr:rowOff>${pt(y)}</xdr:rowOff></xdr:${tag}>`;
+// Foto ditambatkan ke dua sudut di dalam selnya sendiri (twoCellAnchor), jadi posisinya dihitung dari sel itu
+// dan tidak meluber ke baris lain. Lebar kolom w karakter = (7w + 5) px = 0,75(7w + 5) pt.
+function xmlGambar(foto, nomorAwal, t) {
+  const pt = n => Math.round(n * 12700), atas = (t.tinggi - t.foto) / 2;
+  const sudut = (tag, k, r, x, y) => `<xdr:${tag}><xdr:col>${k}</xdr:col><xdr:colOff>${pt(x)}</xdr:colOff><xdr:row>${r}</xdr:row><xdr:rowOff>${pt(y)}</xdr:rowOff></xdr:${tag}>`;
   return XML + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
     `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${NS_R}">` +
     foto.map(([ref], i) => {
-      const n = nomorAwal + i, r = Number(ref.slice(1)) - 1;
-      return '<xdr:twoCellAnchor editAs="oneCell">' + sudut('from', r, kiri, atas) + sudut('to', r, kiri + FOTO_PT, atas + FOTO_PT) +
+      const n = nomorAwal + i, k = ref.charCodeAt(0) - 65, r = Number(ref.slice(1)) - 1;
+      const kiri = Math.floor((0.75 * (7 * t.lebar[k] + 5) - t.foto) / 2);
+      return '<xdr:twoCellAnchor editAs="oneCell">' + sudut('from', k, r, kiri, atas) + sudut('to', k, r, kiri + t.foto, atas + t.foto) +
         `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n + 1}" name="Foto ${n}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
         `<xdr:blipFill><a:blip r:embed="rId${i + 1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
-        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${pt(FOTO_PT)}" cy="${pt(FOTO_PT)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
+        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${pt(t.foto)}" cy="${pt(t.foto)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
         '</xdr:pic><xdr:clientData/></xdr:twoCellAnchor>';
     }).join('') + '</xdr:wsDr>';
 }
 
 function berkasXlsx(lembar, gambar = new Map()) {
-  const isi = [], media = new Map(); // id foto -> nama berkas media (foto yang sama di PAGI dan SORE disimpan sekali)
+  const isi = [], media = new Map(); // id foto -> nama berkas media (foto yang sama di beberapa lembar disimpan sekali)
   const timpa = [];
   lembar.forEach((l, i) => {
     const nomor = i + 1;
@@ -1705,7 +1853,7 @@ function berkasXlsx(lembar, gambar = new Map()) {
     if (rels.length) isi.push([`xl/worksheets/_rels/sheet${nomor}.xml.rels`, relasi(rels)]);
     if (!foto.length) return;
     for (const [, id] of foto) if (!media.has(id)) media.set(id, `image${media.size + 1}.jpeg`);
-    isi.push([`xl/drawings/drawing${nomor}.xml`, xmlGambar(foto, nomor * 1000)],
+    isi.push([`xl/drawings/drawing${nomor}.xml`, xmlGambar(foto, nomor * 1000, l.tata)],
       [`xl/drawings/_rels/drawing${nomor}.xml.rels`, relasi(foto.map(([, id], k) => [`rId${k + 1}`, 'image', '../media/' + media.get(id)]))]);
     timpa.push(`<Override PartName="/xl/drawings/drawing${nomor}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
   });
