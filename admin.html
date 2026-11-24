@@ -209,15 +209,24 @@ dialog p { margin: var(--space-sm) 0; }
 .toast {
   position: fixed; inset-inline: var(--space-md); bottom: var(--space-md); z-index: 2; max-width: 30rem; margin-inline: auto;
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--color-ink); color: var(--color-paper);
+  padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--color-ink); color: var(--color-paper);
+  overflow: hidden; touch-action: pan-y; /* geser ke samping untuk menutup; gulir tegak tetap milik halaman */
 }
+#toast-teks { flex: 1; }
 /* Selama toast tampil, halaman diberi ruang setinggi toast di bawah, supaya baris terakhir bisa digulir ke atasnya. */
 body:has(#toast:not([hidden])) main { padding-bottom: calc(var(--tinggi-toast, 6rem) + 2 * var(--space-md)); }
 .toast button { min-height: 44px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
+.toast .tutup { min-width: 44px; padding: 0; background: transparent; color: inherit; font-size: 1.25rem; line-height: 1; }
+/* Bar sisa waktu: menyusut 6 detik, dan akhir animasinya yang menutup toast; berhenti saat ditunjuk, difokus, atau digeser. */
+.toast-sisa { position: absolute; inset: auto 0 0; height: 3px; background: var(--color-accent); transform-origin: left; animation: sisa-toast 6s linear forwards; }
+@keyframes sisa-toast { to { transform: scaleX(0); } }
+.toast:focus-within .toast-sisa, .toast.digeser .toast-sisa { animation-play-state: paused; }
+.toast.digeser { transition: none; }
 
 @media (hover: hover) {
   .aksi button:not(:disabled):hover, .btn-tipis:hover { background: var(--color-paper-2); color: var(--color-ink); }
   .pilihan button[aria-pressed="false"]:hover { --redup: var(--color-ink); }
+  .toast:hover .toast-sisa { animation-play-state: paused; }
 }
 @media (min-width: 40rem) {
   .saring { grid-template-columns: 10rem 10rem minmax(0, 1fr); }
@@ -412,7 +421,7 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
 <datalist id="pilihan-kelas"></datalist>
 <datalist id="pilihan-akses"></datalist>
 
-<div id="toast"class="toast" role="status" hidden><span id="toast-teks"></span><button id="toast-batal" type="button">Batalkan</button></div>
+<div id="toast"class="toast" role="status" hidden><span id="toast-teks"></span><button id="toast-batal" type="button">Batalkan</button><button id="toast-tutup" class="tutup" type="button" aria-label="Tutup pemberitahuan">×</button><span id="toast-sisa" class="toast-sisa" aria-hidden="true"></span></div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -999,11 +1008,39 @@ $('daftar').addEventListener('click', e => {
   const li = e.target.closest('#daftar > li');
   barisDisentuh = (li && li.dataset.kunci) || '';
 }, true);
+const tutupToast = () => { clearTimeout(jamToast); $('toast').hidden = true; };
+$('toast-sisa').addEventListener('animationend', tutupToast);
+$('toast-tutup').addEventListener('click', tutupToast);
+// Geser toast ke kiri/kanan sepertiga lebarnya (atau sentil cepat) untuk menutup; kurang dari itu kembali ke tempatnya.
+let geser = null;
+$('toast').addEventListener('pointerdown', e => {
+  if (e.button || e.target.closest('button')) return;
+  geser = { x: e.clientX, t: performance.now() };
+  $('toast').setPointerCapture(e.pointerId);
+  $('toast').classList.add('digeser');
+});
+$('toast').addEventListener('pointermove', e => { if (geser) $('toast').style.translate = (e.clientX - geser.x) + 'px 0'; });
+const lepasToast = e => {
+  if (!geser) return;
+  const t = $('toast'), dx = e.type === 'pointerup' ? e.clientX - geser.x : 0, cepat = Math.abs(dx) / (performance.now() - geser.t) > 0.5;
+  geser = null;
+  t.classList.remove('digeser');
+  if (Math.abs(dx) > t.offsetWidth / 3 || (cepat && Math.abs(dx) > 40)) {
+    t.style.translate = Math.sign(dx) * t.offsetWidth + 'px 0';
+    t.style.opacity = 0;
+    jamToast = setTimeout(tutupToast, 200);
+  } else t.style.translate = '';
+};
+$('toast').addEventListener('pointerup', lepasToast);
+$('toast').addEventListener('pointercancel', lepasToast);
 function beriTahu(teks, batalkan) {
   clearTimeout(jamToast);
   $('toast-teks').textContent = teks;
   $('toast-batal').hidden = !batalkan;
-  $('toast-batal').onclick = batalkan ? () => { $('toast').hidden = true; batalkan(); } : null;
+  $('toast-batal').onclick = batalkan ? () => { tutupToast(); batalkan(); } : null;
+  $('toast').style.translate = $('toast').style.opacity = '';
+  // Pesan baru saat toast masih tampil: bar sisa waktu diulang dari penuh.
+  $('toast-sisa').style.animation = 'none'; $('toast-sisa').offsetWidth; $('toast-sisa').style.animation = '';
   $('toast').hidden = false;
   document.body.style.setProperty('--tinggi-toast', $('toast').offsetHeight + 'px');
   const li = barisDisentuh && $('daftar').querySelector(`:scope > li[data-kunci="${CSS.escape(barisDisentuh)}"]`);
@@ -1011,7 +1048,6 @@ function beriTahu(teks, batalkan) {
     const tertutup = li.getBoundingClientRect().bottom - $('toast').getBoundingClientRect().top + 16; // 16: toast masih turun 8 px saat muncul
     if (tertutup > 0) scrollBy(0, tertutup);
   }
-  jamToast = setTimeout(() => { $('toast').hidden = true; }, 6000);
 }
 
 // Foto kecil dimuat saat terlihat, paling banyak dua sekaligus, supaya tidak menghabiskan
