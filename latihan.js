@@ -14,7 +14,8 @@
     ['sah', 'Tandai satu presensi yang fotonya lengkap dengan <b>Sah</b>.'],
     ['tolak', '<b>Tolak</b> presensi LATIHAN LIMA: kartu identitasnya tidak terlihat di foto.'],
     ['batal', 'Tekan <b>Batalkan</b> pada pemberitahuan di bawah untuk mengurungkan satu perubahan.'],
-    ['ttd', 'Tekan <b>Tandai semua TTD</b>, seolah semua sudah tanda tangan di daftar hadir kertas.'],
+    ['tidak-ttd', 'Anggap LATIHAN TUJUH (sesi Pagi) tidak tanda tangan di kertas: tekan <b>Tidak TTD</b> di barisnya.'],
+    ['ttd', 'Lalu tekan <b>Sisanya sudah TTD</b> untuk mahasiswa lain yang sudah tanda tangan.'],
     ['izin-ok', 'Buka tab <b>Izin</b>, lalu tandai <b>Sah</b> izin LATIHAN SEBELAS yang buktinya lengkap.'],
     ['izin-tolak', 'Tolak izin LATIHAN DUA BELAS: tulis dulu catatan alasannya, lalu tekan <b>Tolak</b>.'],
     ['rekap', 'Tekan <b>Unduh rekap</b> dan buka berkasnya.'],
@@ -81,6 +82,7 @@
       },
       ubahTtd: a => {
         for (const h of st.hadir) if (a.foto.includes(h.foto)) h.ttd = a.nilai;
+        if (a.nilai === 'TIDAK' && a.foto.includes('latihan-PAGI-6')) tandai('tidak-ttd');
         if (a.foto.length > 1 && a.nilai === 'YA') tandai('ttd');
         return {};
       },

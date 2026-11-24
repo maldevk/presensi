@@ -167,10 +167,11 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .lencana.OK { background: var(--color-paper-3); }
 .aksi { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
 .aksi button { min-height: 44px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-card); font-size: var(--text-sm); font-weight: 600; }
+.aksi button.ttd { padding-inline: var(--space-2xs); white-space: nowrap; } /* "Tidak TTD" muat satu baris di ponsel */
 .aksi button[aria-pressed="true"].ok { background: var(--color-mint); border-color: transparent; }
 .aksi button[aria-pressed="true"].tolak { background: var(--color-accent-3); border-color: transparent; }
-.aksi button[aria-pressed="true"].ttd { background: var(--color-paper-3); border-color: var(--color-ink); }
-.lencana.tanpa-ttd { background: var(--color-sand); }
+.aksi button[aria-pressed="true"].ttd { background: var(--color-sand); border-color: var(--color-ink); }
+.lencana.sudah-ttd { background: var(--color-mint); }
 .aksi button:disabled { opacity: 0.6; cursor: wait; }
 .aksi button, .btn-tipis { transition: scale var(--dur-micro) var(--ease-snap); }
 .aksi button:not(:disabled):active, .btn-tipis:not(:disabled):active { scale: 0.96; }
@@ -670,7 +671,7 @@ function turPanel(modeLatihan) {
   tur([
     { el: '.saring', judul: 'Pilih tanggal dan kelas', teks: '<p>Daftar menampilkan presensi pada tanggal ini. Admin kelas hanya melihat kelasnya sendiri. Daftar hari ini diperbarui sendiri tiap 30 detik.</p>' },
     { el: '.pilihan[aria-label="Daftar"]', judul: 'Sudah, Belum, dan Izin', teks: '<p><b>Sudah presensi</b>: periksa foto tiap mahasiswa. <b>Belum presensi</b>: yang belum mengirim. <b>Izin</b>: pengajuan izin yang perlu Anda setujui atau tolak.</p>' },
-    { el: '#daftar > li.baris:not(.kerangka)', judul: 'Periksa tiap baris', teks: '<p>Ketuk foto untuk memperbesar. Tekan <b>Sah</b> bila wajah, kartu identitas, dan jam Timemark terlihat. Tekan <b>Tolak</b> bila tidak, maka mahasiswa tercatat alfa.</p><p><b>TTD</b> untuk tanda tangan di daftar hadir kertas. Salah tekan? Tekan <b>Batalkan</b> di pemberitahuan bawah.</p>' },
+    { el: '#daftar > li.baris:not(.kerangka)', judul: 'Periksa tiap baris', teks: '<p>Ketuk foto untuk memperbesar. Tekan <b>Sah</b> bila wajah, kartu identitas, dan jam Timemark terlihat. Tekan <b>Tolak</b> bila tidak, maka mahasiswa tercatat alfa.</p><p>Tanda tangan kertas: tekan <b>Tidak TTD</b> pada yang kolom tanda tangannya kosong, lalu <b>Sisanya sudah TTD</b>. Salah tekan? Tekan <b>Batalkan</b> di pemberitahuan bawah.</p>' },
     { el: '#unduh-rekap', judul: 'Unduh rekap harian', teks: '<p>Berkas Excel berisi lembar per sesi dan lembar IZIN, siap dicetak di A4.</p>' + (modeLatihan
       ? '<p>Sekarang kerjakan <b>Tugas latihan</b> di bagian atas. Tiap tugas tercentang sendiri.</p>'
       : '<p>Ingin berlatih dulu? Tekan <b>Keluar</b>, lalu <b>Coba mode latihan</b> di layar masuk.</p>') },
@@ -837,7 +838,7 @@ function gambar(tandaiBaru) {
   for (const img of $('daftar').querySelectorAll('img[data-foto]')) pengamat.observe(img);
   const calon = pilih.tab === 'hadir' ? calonTtd().length : 0;
   $('ttd-semua').hidden = !calon;
-  $('ttd-semua').textContent = `Tandai semua TTD (${calon})`;
+  $('ttd-semua').textContent = `Sisanya sudah TTD (${calon})`;
 }
 let kunciDaftar = ''; // isi daftar terakhir yang beranimasi masuk
 
@@ -868,7 +869,7 @@ function barisHadir(x) {
   if (x.verifikasi !== 'BELUM') {
     lencana.append(' ', el('span', 'lencana ' + x.verifikasi, (x.verifikasi === 'TOLAK' ? 'Ditolak' : 'Diperiksa') + ' oleh ' + x.oleh));
   }
-  if (x.ttd === 'TIDAK') lencana.append(' ', el('span', 'lencana tanpa-ttd', 'Tidak TTD'));
+  if (x.ttd === 'YA') lencana.append(' ', el('span', 'lencana sudah-ttd', 'TTD ✓'));
   isi.append(lencana);
 
   const aksi = el('div', 'aksi');
@@ -881,12 +882,13 @@ function barisHadir(x) {
     b.addEventListener('click', () => ubah(x, x.verifikasi === nilai ? 'BELUM' : nilai));
     aksi.append(b);
   }
-  // TTD = tanda tangan di daftar hadir kertas. Kosong berarti belum dicek; mematikan TTD mencatat TIDAK.
-  const t = el('button', 'ttd', x.ttd === 'YA' ? 'TTD ✓' : 'TTD');
+  // TTD = tanda tangan di daftar hadir kertas, kosong berarti belum dicek. Admin menandai yang tidak tanda tangan,
+  // lalu "Sisanya sudah TTD" mengisi YA untuk yang belum dicek. Menekan lagi mengembalikan ke belum dicek.
+  const t = el('button', 'ttd', 'Tidak TTD');
   t.type = 'button';
-  t.setAttribute('aria-pressed', String(x.ttd === 'YA'));
-  t.setAttribute('aria-label', `TTD kertas ${x.nama}`);
-  t.addEventListener('click', () => ubahTtdKlik([x], x.ttd === 'YA' ? 'TIDAK' : 'YA'));
+  t.setAttribute('aria-pressed', String(x.ttd === 'TIDAK'));
+  t.setAttribute('aria-label', `Tidak TTD ${x.nama}`);
+  t.addEventListener('click', () => ubahTtdKlik([x], x.ttd === 'TIDAK' ? '' : 'TIDAK'));
   aksi.append(t);
   li.append(foto, isi, aksi);
   return li;
@@ -972,7 +974,7 @@ function ubah(x, nilai, diam) {
   simpanBelakang('p:' + x.foto, x.nama, () => panggilUlang('ubahVerifikasi', { token: admin.token, foto: x.foto, nilai }));
 }
 
-// TTD satu baris atau banyak sekaligus (Tandai semua TTD). Batalkan mengembalikan nilai lama tiap baris.
+// TTD satu baris atau banyak sekaligus (Sisanya sudah TTD). Batalkan mengembalikan nilai lama tiap baris.
 function ubahTtdKlik(xs, nilai, diam) {
   ubahanKe++;
   const lama = xs.map(x => x.ttd);
@@ -980,7 +982,7 @@ function ubahTtdKlik(xs, nilai, diam) {
   gambar();
   const nama = xs.length === 1 ? xs[0].nama : `${xs.length} mahasiswa`;
   if (!diam) {
-    const teks = { YA: 'ditandai TTD', TIDAK: 'ditandai tidak TTD', '': 'dikosongkan TTD-nya' }[nilai];
+    const teks = { YA: 'ditandai sudah TTD', TIDAK: 'ditandai tidak TTD', '': 'dikembalikan ke belum dicek TTD' }[nilai];
     beriTahu(`${nama} ${teks}.`, () => {
       for (const v of new Set(lama)) ubahTtdKlik(xs.filter((_, i) => lama[i] === v), v, true);
     });
