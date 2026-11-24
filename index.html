@@ -858,7 +858,9 @@ function tur(langkah, selesai) {
   const ada = l => { const e = document.querySelector(l.el); return e && e.getClientRects().length; };
   langkah = langkah.filter(ada);
   if (!langkah.length || document.getElementById('tur')) return;
-  const asal = document.activeElement;
+  const asal = document.activeElement, akar = document.documentElement, luapan = akar.style.overflow;
+  // Gulir halaman dikunci selama tur, supaya sorotan tidak lepas dari bagiannya; tur sendiri tetap menggulir lewat kode.
+  akar.style.overflow = 'hidden';
   const d = document.createElement('dialog');
   d.id = 'tur';
   d.setAttribute('aria-labelledby', 'tur-judul');
@@ -894,6 +896,7 @@ function tur(langkah, selesai) {
     removeEventListener('scroll', letak, true);
     d.close();
     d.remove();
+    akar.style.overflow = luapan;
     if (asal && asal.isConnected) asal.focus({ preventScroll: true });
     if (selesai) selesai();
   };

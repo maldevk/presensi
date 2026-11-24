@@ -668,6 +668,7 @@ $('mulai-latihan').addEventListener('click', async () => {
 });
 
 function turPanel(modeLatihan) {
+  if (pilih.tab !== 'hadir') $('tab-hadir').click(); // langkah 3 menjelaskan baris Sudah presensi
   tur([
     { el: '.saring', judul: 'Pilih tanggal dan kelas', teks: '<p>Daftar menampilkan presensi pada tanggal ini. Admin kelas hanya melihat kelasnya sendiri. Daftar hari ini diperbarui sendiri tiap 30 detik.</p>' },
     { el: '.pilihan[aria-label="Daftar"]', judul: 'Sudah, Belum, dan Izin', teks: '<p><b>Sudah presensi</b>: periksa foto tiap mahasiswa. <b>Belum presensi</b>: yang belum mengirim. <b>Izin</b>: pengajuan izin yang perlu Anda setujui atau tolak.</p>' },
@@ -1636,7 +1637,9 @@ function tur(langkah, selesai) {
   const ada = l => { const e = document.querySelector(l.el); return e && e.getClientRects().length; };
   langkah = langkah.filter(ada);
   if (!langkah.length || document.getElementById('tur')) return;
-  const asal = document.activeElement;
+  const asal = document.activeElement, akar = document.documentElement, luapan = akar.style.overflow;
+  // Gulir halaman dikunci selama tur, supaya sorotan tidak lepas dari bagiannya; tur sendiri tetap menggulir lewat kode.
+  akar.style.overflow = 'hidden';
   const d = document.createElement('dialog');
   d.id = 'tur';
   d.setAttribute('aria-labelledby', 'tur-judul');
@@ -1672,6 +1675,7 @@ function tur(langkah, selesai) {
     removeEventListener('scroll', letak, true);
     d.close();
     d.remove();
+    akar.style.overflow = luapan;
     if (asal && asal.isConnected) asal.focus({ preventScroll: true });
     if (selesai) selesai();
   };
