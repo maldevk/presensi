@@ -211,6 +211,8 @@ dialog p { margin: var(--space-sm) 0; }
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--color-ink); color: var(--color-paper);
 }
+/* Selama toast tampil, halaman diberi ruang setinggi toast di bawah, supaya baris terakhir bisa digulir ke atasnya. */
+body:has(#toast:not([hidden])) main { padding-bottom: calc(var(--tinggi-toast, 6rem) + 2 * var(--space-md)); }
 .toast button { min-height: 44px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
 
 @media (hover: hover) {
@@ -991,13 +993,24 @@ window.addEventListener('beforeunload', e => {
   if (belumTersimpan || aturBerubah) e.preventDefault(); // peramban menampilkan peringatan bawaan
 });
 
-let jamToast = 0;
+let jamToast = 0, barisDisentuh = '';
+// Baris daftar yang terakhir ditekan (Sah, Tolak, TTD, izin); bila toast menutupinya, halaman digeser sedikit.
+$('daftar').addEventListener('click', e => {
+  const li = e.target.closest('#daftar > li');
+  barisDisentuh = (li && li.dataset.kunci) || '';
+}, true);
 function beriTahu(teks, batalkan) {
   clearTimeout(jamToast);
   $('toast-teks').textContent = teks;
   $('toast-batal').hidden = !batalkan;
   $('toast-batal').onclick = batalkan ? () => { $('toast').hidden = true; batalkan(); } : null;
   $('toast').hidden = false;
+  document.body.style.setProperty('--tinggi-toast', $('toast').offsetHeight + 'px');
+  const li = barisDisentuh && $('daftar').querySelector(`:scope > li[data-kunci="${CSS.escape(barisDisentuh)}"]`);
+  if (li) {
+    const tertutup = li.getBoundingClientRect().bottom - $('toast').getBoundingClientRect().top + 16; // 16: toast masih turun 8 px saat muncul
+    if (tertutup > 0) scrollBy(0, tertutup);
+  }
   jamToast = setTimeout(() => { $('toast').hidden = true; }, 6000);
 }
 
