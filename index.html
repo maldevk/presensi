@@ -44,6 +44,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: clip; }
+/* Sorotan ketuk bawaan browser seluler (kotak biru) diganti umpan balik tekan tiap tombol. */
+html { -webkit-tap-highlight-color: transparent; }
 html { scrollbar-color: var(--color-muted) var(--color-paper); scrollbar-gutter: stable; } /* lebar tetap saat pindah Presensi/Izin, agar jempol tidak melompat */
 body {
   margin: 0; min-height: 100dvh; background: var(--grain), var(--fibre), var(--color-paper); color: var(--color-ink);
@@ -119,7 +121,7 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .mode {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
   border-radius: var(--radius-input); background: var(--color-paper-2);
-  touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
 .mode button {
   position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: calc(var(--radius-input) - 4px); background: transparent;

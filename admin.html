@@ -32,6 +32,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: clip; }
+/* Sorotan ketuk bawaan browser seluler (kotak biru) diganti umpan balik tekan tiap tombol. */
+html { -webkit-tap-highlight-color: transparent; }
 /* Ruang scrollbar selalu disediakan: tanpa ini, pindah tab yang mengubah tinggi halaman menggeser lebar dan jempol tab melompat. */
 html { scrollbar-gutter: stable; }
 body {
@@ -107,7 +109,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--co
 .pilihan {
   position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2xs); padding: var(--space-2xs);
   border-radius: var(--radius-input); background: var(--color-paper-2);
-  touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none;
 }
 .pilihan button { position: relative; z-index: 1; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--color-muted); font-weight: 600; transition: scale var(--dur-micro) var(--ease-snap); }
 .pilihan button[aria-pressed="true"] { color: var(--color-ink); }
