@@ -73,7 +73,7 @@ input[type="date"] { padding-inline: var(--space-sm); }
 .btn-tipis { min-height: 44px; padding: 0 var(--space-md); border: 1px solid var(--color-edge); border-radius: var(--radius-pill); background: var(--color-card); font-weight: 600; font-size: var(--text-sm); }
 
 .pesan { display: flex; gap: var(--space-xs); align-items: baseline; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-input); background: var(--color-error-paper); color: var(--color-error); }
-.pesan.tenang { display: block; background: var(--color-paper-2); color: var(--color-ink); }
+.pesan.tenang { display: block; white-space: pre-line; background: var(--color-paper-2); color: var(--color-ink); }
 /* Galat tepat di bawah isiannya; tanda seru supaya maknanya tidak hanya dari warna. Sama dengan index.html. */
 .galat-isian { display: flex; gap: var(--space-xs); align-items: baseline; margin: var(--space-2xs) 0 0; color: var(--color-error); font-weight: 600; }
 .galat-isian::before, .pesan:not(.tenang)::before {
@@ -1293,8 +1293,9 @@ $('simpan-atur').addEventListener('click', async () => {
     const r = periksa(await panggilUlang('simpanPengaturan', { token: admin.token, nilai, libur }));
     if (!r) return;
     if (r.tolak) return tampil($('pesan-atur'), r.tolak);
+    const lama = atur;
     isiAtur(r);
-    tampil($('pesan-atur'), 'Tersimpan dan langsung berlaku untuk halaman presensi.', true);
+    tampil($('pesan-atur'), ringkasUbahan(lama, r), true);
     muatData(); // libur dan jam sesi mengubah daftar "Belum presensi"
   } catch (e) {
     tampil($('pesan-atur'), 'Tidak tersimpan. Periksa sinyal lalu tekan Simpan lagi.');
@@ -1303,6 +1304,23 @@ $('simpan-atur').addEventListener('click', async () => {
     $('simpan-atur').textContent = 'Simpan pengaturan';
   }
 });
+
+// Akhir yang jelas (peak-end): sebutkan apa yang berubah, bukan sekadar "tersimpan".
+function ringkasUbahan(lama, baru) {
+  const ubah = [];
+  for (const [judul, kunci] of KELOMPOK_ATUR) for (const k of kunci) {
+    if (lama.nilai[k] !== baru.nilai[k]) ubah.push(`${judul === 'Umum' ? '' : judul + ', '}${LABEL_ATUR[k] || LABEL_ATUR[k.slice(5)]}: `
+      + `${teksPilihan(k, lama.nilai[k])} → ${teksPilihan(k, baru.nilai[k])}`);
+  }
+  const tgl = l => new Set(l.map(x => x.tanggal));
+  const [tl, tb] = [tgl(lama.libur), tgl(baru.libur)];
+  const tambah = [...tb].filter(t => !tl.has(t)), hapus = [...tl].filter(t => !tb.has(t));
+  if (tambah.length) ubah.push('Libur ditambah: ' + tambah.join(', '));
+  if (hapus.length) ubah.push('Libur dihapus: ' + hapus.join(', '));
+  if (!ubah.length) return 'Tersimpan. Tidak ada perubahan.';
+  return ['✓ Tersimpan, langsung berlaku:', ...ubah.slice(0, 3).map(u => '• ' + u),
+    ...(ubah.length > 3 ? [`• dan ${ubah.length - 3} perubahan lain`] : [])].join('\n');
+}
 
 // Data mahasiswa dan akun admin, hanya akses UTAMA (server juga memeriksa). Setiap Simpan langsung ditulis ke Sheet.
 let mhsData = null; // [{ kelas, nim, nama, asal, aktif }]
