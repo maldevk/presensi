@@ -626,6 +626,8 @@ async function kirimPresensi() {
   // Menekan Kirim lagi setelah gagal tidak mengulang hitungan, selama NIM dan fotonya sama.
   if (!tekan || tekan.nim !== pemilik.nim || tekan.foto !== fotoBase64) tekan = { nim: pemilik.nim, foto: fotoBase64, waktu: Date.now() };
   const kiriman = () => [{ nim: tekan.nim, foto: tekan.foto, tunda: Date.now() - tekan.waktu }];
+  const jam = new Date(tekan.waktu).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  tampilPesan(`Jam tekan Anda ${jam} tetap dihitung, meski pengiriman lambat.`, 'tunggu');
   try {
     const r = await panggilUlang('kirimPresensi', kiriman, pesanUlang(
       'Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman. Waktu Anda menekan Kirim tetap dihitung, sampai 5 menit.'));
@@ -677,10 +679,17 @@ $('form').addEventListener('submit', async e => {
   for (const id of ISIAN) $(id).disabled = true;
   $('kirim').textContent = 'Mengirim…';
   $('kirim').ariaBusy = 'true';
+  // Penghitung detik sesudah 3 detik, supaya kiriman lambat tidak tampak macet.
+  const mulaiKirim = Date.now();
+  const detik = setInterval(() => {
+    const n = Math.round((Date.now() - mulaiKirim) / 1000);
+    if (n >= 3) $('kirim').textContent = $('kirim').textContent.replace(/( \d+ dtk)?$/, ` ${n} dtk`);
+  }, 1000);
   let salah = ''; // id isian yang galat; isian nonaktif tidak bisa difokuskan, jadi tunggu sampai aktif lagi
   try {
     salah = await (mode === 'izin' ? kirimIzin() : kirimPresensi());
   } finally {
+    clearInterval(detik);
     for (const id of ISIAN) $(id).disabled = false;
     $('kirim').textContent = teksKirim();
     $('kirim').ariaBusy = null;
