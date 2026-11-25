@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Panel Admin Presensi</title>
 <style>
@@ -46,7 +46,12 @@ body {
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 
-main { width: 100%; max-width: var(--container); margin-inline: auto; padding: var(--space-lg) var(--space-md) var(--space-xl); display: grid; gap: var(--space-md); }
+main { width: 100%; max-width: var(--container); margin-inline: auto; display: grid; gap: var(--space-md);
+  /* viewport-fit=cover: isi tidak masuk ke area poni dan garis home (iPhone mendatar) */
+  padding: var(--space-lg) max(var(--space-md), env(safe-area-inset-right)) calc(var(--space-xl) + env(safe-area-inset-bottom)) max(var(--space-md), env(safe-area-inset-left)); }
+/* Tanpa kata yatim di akhir paragraf; judul dibagi seimbang. */
+body { text-wrap: pretty; }
+h1, h2, legend { text-wrap: balance; }
 h1 { margin: 0; font-size: var(--text-2xl); font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; overflow-wrap: break-word; min-width: 0; }
 .kartu { padding: var(--space-lg) var(--space-md); border-radius: var(--radius-card); background: var(--color-card); box-shadow: var(--shadow-card); }
 
@@ -208,14 +213,16 @@ dialog p { margin: var(--space-sm) 0; }
 
 /* Pemberitahuan singkat */
 .toast {
-  position: fixed; inset-inline: var(--space-md); bottom: var(--space-md); z-index: 2; max-width: 30rem; margin-inline: auto;
+  position: fixed; z-index: 2; max-width: 30rem; margin-inline: auto;
+  inset-inline: max(var(--space-md), env(safe-area-inset-left)) max(var(--space-md), env(safe-area-inset-right));
+  bottom: calc(var(--space-md) + env(safe-area-inset-bottom)); /* di atas garis home iPhone */
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-sm) var(--space-xs) var(--space-sm) var(--space-md); border-radius: var(--radius-stock); background: var(--color-ink); color: var(--color-paper);
   overflow: hidden; touch-action: pan-y; /* geser ke samping untuk menutup; gulir tegak tetap milik halaman */
 }
 #toast-teks { flex: 1; }
 /* Selama toast tampil, halaman diberi ruang setinggi toast di bawah, supaya baris terakhir bisa digulir ke atasnya. */
-body:has(#toast:not([hidden])) main { padding-bottom: calc(var(--tinggi-toast, 6rem) + 2 * var(--space-md)); }
+body:has(#toast:not([hidden])) main { padding-bottom: calc(var(--tinggi-toast, 6rem) + 2 * var(--space-md) + env(safe-area-inset-bottom)); }
 .toast button { min-height: 44px; padding: 0 var(--space-sm); border: 0; border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
 .toast .tutup { min-width: 44px; padding: 0; background: transparent; color: inherit; font-size: 1.25rem; line-height: 1; }
 /* Bar sisa waktu: menyusut 6 detik, dan akhir animasinya yang menutup toast; berhenti saat ditunjuk, difokus, atau digeser. */
@@ -268,7 +275,7 @@ dialog[open]::backdrop { transition: opacity 200ms ease; }
 }
 /* Tur singkat (salinan sama di index.html dan admin.html; ubah keduanya). Dialog selebar layar menahan klik,
    sorotan berbayang besar meredupkan sisa halaman, kartu di bawah atau di atas bagian yang dijelaskan. */
-#tur { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0;
+#tur { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0 0 env(safe-area-inset-bottom);
   border: 0; border-radius: 0; background: none; box-shadow: none; overflow: hidden; color: var(--color-ink); }
 #tur::backdrop { background: none; }
 #tur[open] { transition: opacity 200ms var(--ease-snap); }
@@ -1653,7 +1660,8 @@ function tur(langkah, selesai) {
     const r = target.getBoundingClientRect(), k = q('.tur-kartu'), pad = 6, jarak = 12;
     Object.assign(q('.tur-sorot').style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + 2 * pad + 'px', height: r.height + 2 * pad + 'px' });
     const bawah = r.bottom + pad + jarak;
-    k.style.top = (bawah + k.offsetHeight <= innerHeight - 8 ? bawah : Math.max(8, r.top - pad - jarak - k.offsetHeight)) + 'px';
+    const batasBawah = innerHeight - 8 - (parseFloat(getComputedStyle(d).paddingBottom) || 0); // di atas garis home iPhone
+    k.style.top = (bawah + k.offsetHeight <= batasBawah ? bawah : Math.max(8, r.top - pad - jarak - k.offsetHeight)) + 'px';
     k.style.left = Math.min(Math.max(16, r.left), innerWidth - k.offsetWidth - 16) + 'px';
   };
   const tampil = () => {
