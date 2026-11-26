@@ -201,7 +201,8 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   border: 0; border-radius: var(--radius-stock); font-weight: 600; white-space: nowrap; cursor: pointer; touch-action: manipulation;
   background: var(--grain), var(--fibre), var(--color-accent); color: var(--color-accent-ink);
   box-shadow: 0 var(--edge) 0 0 var(--color-accent-deep);
-  transition: translate var(--dur-micro) var(--ease-spring), box-shadow var(--dur-micro) var(--ease-snap);
+  transition: translate var(--dur-micro) var(--ease-spring), box-shadow var(--dur-micro) var(--ease-snap),
+    background-color 300ms var(--ease-snap), color 300ms var(--ease-snap), rotate 300ms var(--ease-spring), border-radius 300ms var(--ease-snap);
 }
 .btn--primary:active { --edge: 1px; translate: 0 4px; }
 .btn--primary[aria-busy="true"]::before {
@@ -214,6 +215,15 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   background: var(--color-paper-3); color: var(--color-muted); box-shadow: 0 var(--edge) 0 0 var(--color-edge);
 }
 
+/* Selama mengirim, tombol menjadi lembaran kertas kecil yang melayang (lebarnya dianimasikan kertasMulai). */
+.btn--primary.kertas:disabled {
+  justify-self: center; width: 12rem; translate: none; rotate: -2deg; border-radius: 6px; cursor: progress;
+  color: var(--color-ink); box-shadow: 0 0 0 0 transparent; filter: var(--shadow-paper);
+  animation: melayang 2.4s ease-in-out 450ms infinite;
+}
+.btn--primary.kertas::before { display: none; }
+@keyframes melayang { 50% { transform: translateY(-4px) rotate(1deg); } }
+.detik { margin: 0; color: var(--color-muted); font-size: var(--text-sm); text-align: center; font-variant-numeric: tabular-nums; }
 .terima { --sheet: var(--color-mint); color: var(--color-on-fill); padding: var(--space-lg) var(--space-md) var(--space-xl); }
 /* Akhir alur: centang tergambar sekali saat tanda terima muncul (hidden → tampil memulai ulang animasinya). */
 .centang { display: block; width: 2.5rem; height: 2.5rem; margin-bottom: var(--space-sm); fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -254,6 +264,7 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   .kerangka span, .btn--primary[aria-busy="true"]::before, .centang path { animation: none; }
   .mode button[aria-pressed="false"]:active { scale: none; }
   .btn--primary { transition: none; }
+  .btn--primary.kertas:disabled { animation: none; }
   .btn--primary:active, .btn--primary:disabled, .btn--primary:not(:disabled, :active):hover { translate: none; }
 }
 /* Tur singkat (salinan sama di index.html dan admin.html; ubah keduanya). Dialog selebar layar menahan klik,
@@ -371,8 +382,9 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
       </div>
     </div>
 
-    <div id="pesan" class="pesan" role="alert" hidden></div>
     <button id="kirim" class="btn--primary" type="submit">Kirim presensi</button>
+    <p id="detik" class="detik" aria-hidden="true" hidden></p>
+    <div id="pesan" class="pesan" role="alert" hidden></div>
   </form>
 
   <section id="terima" class="terima" hidden tabindex="-1">
@@ -488,9 +500,11 @@ function tampilTerima(judul, isi) {
     dd.textContent = v;
     return [dt, dd];
   }));
+  const dari = $('kirim').getBoundingClientRect(); // kertas yang melayang, sebelum formulir disembunyikan
   $('form').hidden = true;
   $('terima').hidden = false;
   $('terima').focus();
+  kertasJadiTerima(dari);
 }
 
 function tampilSesi(s) {
@@ -629,6 +643,7 @@ async function kirimPresensi() {
   const jam = new Date(tekan.waktu).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   tampilPesan(`Jam tekan Anda ${jam} tetap dihitung, meski pengiriman lambat.`, 'tunggu');
   try {
+    kertasMulai();
     const r = await panggilUlang('kirimPresensi', kiriman, pesanUlang(
       'Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman. Waktu Anda menekan Kirim tetap dihitung, sampai 5 menit.'));
     tekan = null;
@@ -656,6 +671,7 @@ async function kirimIzin() {
   if (salah.length) return salah[0][0];
   try {
     // Data yang sama di tiap percobaan: jika yang pertama ternyata tercatat, server mengembalikan tanda terimanya.
+    kertasMulai();
     const r = await panggilUlang('ajukanIzin', [data], pesanUlang('Server sedang ramai. Dicoba lagi otomatis, jangan tutup halaman.'));
     tampilPesan('');
     if (r.tolak) return tampilPesan(r.tolak);
@@ -683,13 +699,15 @@ $('form').addEventListener('submit', async e => {
   const mulaiKirim = Date.now();
   const detik = setInterval(() => {
     const n = Math.round((Date.now() - mulaiKirim) / 1000);
-    if (n >= 3) $('kirim').textContent = $('kirim').textContent.replace(/( \d+ dtk)?$/, ` ${n} dtk`);
+    if (n >= 3) { $('detik').hidden = false; $('detik').textContent = `Sudah ${n} detik`; }
   }, 1000);
   let salah = ''; // id isian yang galat; isian nonaktif tidak bisa difokuskan, jadi tunggu sampai aktif lagi
   try {
     salah = await (mode === 'izin' ? kirimIzin() : kirimPresensi());
   } finally {
     clearInterval(detik);
+    $('detik').hidden = true;
+    kertasLepas();
     for (const id of ISIAN) $(id).disabled = false;
     $('kirim').textContent = teksKirim();
     $('kirim').ariaBusy = null;
@@ -715,6 +733,37 @@ panggilUlang('ambilAwal', [], () => { $('sesi').textContent = 'Server sedang ram
 // kedua tab lalu mendarat dengan pegas; tepi belakang memampat 3px dan kembali. Jempol bisa diseret (ditahan
 // karet di ujung) dan dilempar. Tab tetap dipilih lewat klik tombolnya, jadi handler yang ada tidak berubah.
 const geraknyaDikurangi = matchMedia('(prefers-reduced-motion: reduce)');
+
+// Tombol Kirim sebagai kertas: tertekan, memipih lalu meregang menjadi lembaran kecil yang melayang (CSS .kertas).
+// Berhasil = lembaran itu tumbuh menjadi tanda terima (FLIP); gagal = kembali menjadi tombol.
+// Isi tanda terima sudah ada di DOM sebelum animasi; animasi hanya tampilan dan tidak menunda apa pun.
+function ubahLebar(ubah, langkah) {
+  const b = $('kirim'), w0 = b.offsetWidth;
+  ubah(b);
+  if (geraknyaDikurangi.matches) return;
+  const w1 = b.offsetWidth;
+  b.animate(langkah(w0, w1), { duration: 480, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+}
+function kertasMulai() {
+  if ($('kirim').classList.contains('kertas')) return;
+  ubahLebar(b => b.classList.add('kertas'), (w0, w1) => [
+    { width: w0 + 'px', scale: '1 1' }, { width: w1 * 0.94 + 'px', scale: '0.96 1.08', offset: 0.5 }, { width: w1 + 'px', scale: '1 1' }]);
+}
+function kertasLepas() {
+  if (!$('kirim').classList.contains('kertas')) return;
+  if ($('form').hidden) return $('kirim').classList.remove('kertas'); // sudah menjadi tanda terima
+  ubahLebar(b => b.classList.remove('kertas'), (w0, w1) => [
+    { width: w0 + 'px', scale: '1 1' }, { width: w1 + 'px', scale: '1.02 0.94', offset: 0.6 }, { width: w1 + 'px', scale: '1 1' }]);
+}
+function kertasJadiTerima(dari) {
+  if (geraknyaDikurangi.matches || !dari.width) return;
+  const t = $('terima'), ke = t.getBoundingClientRect();
+  // Transform dibaca dari kanan: diskalakan dulu, lalu dimiringkan, lalu dipindah, jadi tidak menceng.
+  t.animate([
+    { transformOrigin: '0 0', transform: `translate(${dari.left - ke.left}px, ${dari.top - ke.top}px) rotate(-2deg) scale(${dari.width / ke.width}, ${dari.height / ke.height})` },
+    { transformOrigin: '0 0', transform: 'none' }], { duration: 520, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' });
+  for (const c of t.children) c.animate({ opacity: [0, 0, 1], offset: [0, 0.3, 0.7] }, { duration: 520 });
+}
 const lunak = p => 1 - (1 - Math.min(1, p)) ** 4;
 // Pegas seperti di Motion: durasi visual (detik) dan pantulan 0..1 menjadi kekakuan dan redaman, massa 1.
 const pegas = (durasi, pantul = 0) => { const k = (2 * Math.PI / (durasi * 1.2)) ** 2; return { k, c: 2 * (1 - pantul) * Math.sqrt(k) }; };
