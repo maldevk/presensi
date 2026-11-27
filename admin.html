@@ -1043,7 +1043,7 @@ $('unduh-rekap').addEventListener('click', async () => {
     const nama = (latihan ? 'LATIHAN ' : '') + berkas; // berkas latihan tidak tertukar dengan rekap asli
     const fotoDi = l => l.baris.flatMap(x => x.filter(v => v && v.foto).map(v => v.foto));
     const id = [...new Set(lembar.flatMap(fotoDi))];
-    const gambar = await fotoRekap(id, new Set(fotoDi(lembar.find(l => l.nama === 'IZIN'))), (n) => { b.textContent = `Mengambil foto ${n}/${id.length}…`; });
+    const gambar = await fotoRekap(id, new Set(fotoDi(lembar.find(l => l.nama === 'PERIZINAN'))), (n) => { b.textContent = `Mengambil foto ${n}/${id.length}…`; });
     const url = URL.createObjectURL(new Blob([berkasXlsx(lembar, gambar)],
       { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: nama });
@@ -1732,12 +1732,14 @@ const TATA_REKAP = {
   kepala: ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH (KAPITAL)', 'KELAS', 'PRESENSI', 'BUKTI TIMESTAMP (1:1)', 'KETERANGAN'],
   lebar: [5, 28, 16, 16, 7, 12, 17, 24], tinggi: 90, foto: 80, kiri: [1], arah: 'portrait',
 };
-const TATA_IZIN = {
-  kepala: ['NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'KELAS', 'JENIS & WAKTU IZIN', 'ALASAN & CATATAN', 'STATUS', 'BUKTI 1', 'BUKTI 2', 'BUKTI 3'],
-  lebar: [5, 24, 16, 7, 18, 30, 13, 26, 26, 26], tinggi: 140, foto: 130, kiri: [1, 4, 5], arah: 'landscape',
+// Lembar PERIZINAN mengikuti berkas perizinan lapangan: alfa dan izin dalam satu tabel, satu baris per mahasiswa.
+const TATA_PERIZINAN = {
+  kepala: ['TANGGAL', 'NO', 'NAMA LENGKAP (KAPITAL)', 'NIM', 'ASAL DAERAH', 'KELAS', 'PERIZINAN (FULL DAY/ PAGI/ SORE)',
+    'PERIZINAN SORE/PAGI PADA PUKUL', 'ALASAN', 'BUKTI'],
+  lebar: [15, 5, 28, 16, 16, 7, 16, 16, 30, 17], tinggi: 90, foto: 80, kiri: [2, 8], arah: 'landscape',
 };
-const CAKUPAN_REKAP = { SEHARI: 'Sehari penuh', PAGI: 'Setengah hari pagi', SORE: 'Setengah hari sore' };
-const STATUS_IZIN_REKAP = { OK: 'DISETUJUI', BELUM: 'BELUM DIPERIKSA' };
+// shortcut: jam baku seperti di berkas lapangan; jam khusus (misalnya 09.00-11.40) tetap diubah tangan, karena izin tidak mencatat jam.
+const JAM_PERIZINAN = { PAGI: '09.00-12.00', SORE: '12.00-16.00', 'FULL DAY': '09.00-16.00' };
 const tautanDrive = id => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
 
 // Isi tiap sheet dari jawaban dataHari: satu baris per mahasiswa aktif, status dari server (sama dengan menu Rekap).
@@ -1747,46 +1749,48 @@ function isiRekap(d, kelas) {
   const hari = HARI_REKAP[new Date(Date.UTC(y, b - 1, h)).getUTCDay()];
   const siapa = kelas ? 'KELAS ' + kelas : 'SEMUA KELAS';
   const bukti = (teks, foto) => ({ teks, url: tautanDrive(foto), foto });
-  // Izin yang berlaku hari ini (yang ditolak tidak dihitung, mahasiswanya alfa), untuk lembar IZIN.
+  // Izin yang berlaku hari ini (yang ditolak tidak dihitung, mahasiswanya alfa), untuk lembar PERIZINAN.
   const izin = d.pengajuan.filter(z => z.status !== 'TOLAK' && z.mulai <= d.tanggal && d.tanggal <= z.selesai &&
     (!kelas || z.kelas === kelas) && (z.cakupan === 'SEHARI' || d.sesi.includes(z.cakupan)));
-  // Tiap sesi dipecah: lembar sesi berisi yang hadir, lembar ALFA berisi yang alfa; yang izin hanya di lembar IZIN.
-  const perSesi = d.sesi.map((s, i) => {
+  // Lembar sesi hanya berisi yang hadir; yang alfa atau izin masuk lembar PERIZINAN.
+  const lembar = d.sesi.map((s, i) => {
     const n = { HADIR: 0, TERLAMBAT: 0, IZIN: 0, ALFA: 0 };
-    const baris = mhs.map(m => {
-      const st = m.tiap[i];
-      n[st]++;
-      const kiriman = d.hadir.filter(x => x.nim === m.nim && x.sesi === s);
-      let g = '-', ket = st;
-      if (st === 'HADIR' || st === 'TERLAMBAT') {
-        const x = kiriman.find(k => k.verifikasi !== 'TOLAK');
-        g = bukti(x.jam, x.foto);
-        ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
-      } else if (st === 'ALFA') {
-        const x = kiriman.find(k => k.verifikasi === 'TOLAK');
-        if (x) { g = bukti(x.jam, x.foto); ket = 'ALFA: presensi ditolak'; }
-      }
-      return [m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, g, ket];
+    for (const m of mhs) n[m.tiap[i]]++;
+    const baris = mhs.filter(m => m.tiap[i] === 'HADIR' || m.tiap[i] === 'TERLAMBAT').map((m, no) => {
+      const st = m.tiap[i], x = d.hadir.find(k => k.nim === m.nim && k.sesi === s && k.verifikasi !== 'TOLAK');
+      const ket = { YA: `TTD & ${st}`, TIDAK: `TIDAK TTD & ${st}` }[x.ttd] || `${st} (TTD belum dicek)`;
+      return [no + 1, m.nama.toUpperCase(), m.nim, m.asal.toUpperCase(), m.kelas, st, bukti(x.jam, x.foto), ket];
     });
-    const ringkas = `Hadir ${n.HADIR}, Terlambat ${n.TERLAMBAT}, Izin ${n.IZIN}, Alfa ${n.ALFA}, dari ${mhs.length} mahasiswa`;
-    const pilih = (nama, judul, status) => ({ nama, tata: TATA_REKAP, ringkas,
-      judul: `${judul} ${s} ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
-      baris: baris.filter(x => status.includes(x[4])).map((x, no) => [no + 1, ...x]) });
-    return [pilih(s, 'PRESENSI JAM KAMPUS', ['HADIR', 'TERLAMBAT']), pilih('ALFA ' + s, 'ALFA JAM KAMPUS', ['ALFA'])];
+    return {
+      nama: s, tata: TATA_REKAP, baris,
+      judul: `PRESENSI JAM KAMPUS ${s} ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
+      ringkas: `Hadir ${n.HADIR}, Terlambat ${n.TERLAMBAT}, Izin ${n.IZIN}, Alfa ${n.ALFA}, dari ${mhs.length} mahasiswa`,
+    };
   });
-  const lembar = [...perSesi.map(x => x[0]), ...perSesi.map(x => x[1])];
-  // Lembar IZIN: satu baris per pengajuan, tiap foto bukti di selnya sendiri.
-  const tgl = t => { const [ty, tb, th] = t.split('-').map(Number); return `${th} ${BULAN_REKAP[tb - 1].slice(0, 3)} ${ty}`; };
-  const urut = izin.slice().sort((p, q) => p.kelas.localeCompare(q.kelas) || p.nama.localeCompare(q.nama));
-  const disetujui = urut.filter(z => z.status === 'OK').length;
+  // PERIZINAN: tiap sesi yang tidak dihadiri diberi keterangan; dua sesi dengan keterangan sama (alfa, atau satu izin sehari) jadi satu baris FULL DAY.
+  const keterangan = (m, s, st) => {
+    if (st === 'IZIN') {
+      const z = izin.find(z => z.nim === m.nim && (z.cakupan === 'SEHARI' || z.cakupan === s));
+      if (!z) return { kunci: 'IZIN', izin: true, alasan: 'IZIN', bukti: '-' };
+      return { kunci: z, izin: true, bukti: z.bukti[0] ? bukti('Bukti', z.bukti[0]) : '-',
+        alasan: `${z.jenis}: ${z.alasan}` + (z.catatan ? `\nCatatan admin: ${z.catatan}` : '') + (z.status === 'OK' ? '' : '\n(BELUM DIPERIKSA)') };
+    }
+    const ditolak = d.hadir.some(x => x.nim === m.nim && x.sesi === s && x.verifikasi === 'TOLAK');
+    const alasan = ditolak ? 'TIDAK ADA KETERANGAN (PRESENSI DITOLAK)' : 'TIDAK ADA KETERANGAN';
+    return { kunci: alasan, izin: false, alasan, bukti: '-' };
+  };
+  const absen = mhs.flatMap(m => {
+    const k = d.sesi.map((s, i) => (m.tiap[i] === 'IZIN' || m.tiap[i] === 'ALFA' ? keterangan(m, s, m.tiap[i]) : null));
+    const sehari = k.length === 2 && k[0] && k[1] && k[0].kunci === k[1].kunci;
+    return (sehari ? [['FULL DAY', k[0]]] : d.sesi.map((s, i) => [s, k[i]]).filter(([, x]) => x)).map(([cakupan, x]) => [m, cakupan, x]);
+  });
+  const nIzin = absen.filter(([, , x]) => x.izin).length;
   lembar.push({
-    nama: 'IZIN', tata: TATA_IZIN,
-    judul: `REKAP IZIN ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
-    baris: urut.map((z, no) => [no + 1, z.nama.toUpperCase(), z.nim, z.kelas,
-      `${z.jenis}\n${CAKUPAN_REKAP[z.cakupan] || z.cakupan}\n${z.mulai === z.selesai ? tgl(z.mulai) : tgl(z.mulai) + ' s.d. ' + tgl(z.selesai)}`,
-      z.alasan + (z.catatan ? `\nCatatan admin: ${z.catatan}` : ''), STATUS_IZIN_REKAP[z.status] || z.status,
-      ...[0, 1, 2].map(i => z.bukti[i] ? bukti(`Bukti ${i + 1}`, z.bukti[i]) : '')]),
-    ringkas: urut.length ? `${urut.length} izin: ${disetujui} disetujui, ${urut.length - disetujui} belum diperiksa` : 'Tidak ada izin pada tanggal ini.',
+    nama: 'PERIZINAN', tata: TATA_PERIZINAN,
+    judul: `PERIZINAN JAM KAMPUS ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
+    baris: absen.map(([m, cakupan, x], no) => [`${h} ${BULAN_REKAP[b - 1]} ${y}`, no + 1, m.nama.toUpperCase(), m.nim,
+      m.asal.toUpperCase(), m.kelas, cakupan, JAM_PERIZINAN[cakupan], x.alasan, x.bukti]),
+    ringkas: absen.length ? `${absen.length} baris: ${absen.length - nIzin} alfa, ${nIzin} izin` : 'Semua mahasiswa hadir.',
   });
   return { nama: `PRESENSI JAM KAMPUS ${siapa} ${h} ${BULAN_REKAP[b - 1].slice(0, 3)} ${y}.xlsx`, lembar };
 }
@@ -1849,7 +1853,7 @@ function xmlLembar(l, gambar, nomor) {
     '<printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
     `<pageSetup paperSize="9" orientation="${t.arah}" fitToWidth="1" fitToHeight="0"/>` +
     // NIM sengaja teks; tanpa ini Excel menandai setiap sel NIM dengan segitiga hijau.
-    (l.baris.length ? `<ignoredErrors><ignoredError sqref="C3:C${l.baris.length + 2}" numberStoredAsText="1"/></ignoredErrors>` : '') +
+    (l.baris.length ? `<ignoredErrors><ignoredError sqref="${kolomHuruf(t.kepala.indexOf('NIM'))}3:${kolomHuruf(t.kepala.indexOf('NIM'))}${l.baris.length + 2}" numberStoredAsText="1"/></ignoredErrors>` : '') +
     (foto.length ? `<drawing r:id="${idGambar}"/>` : '') + '</worksheet>';
   return { xml, rels, foto };
 }
