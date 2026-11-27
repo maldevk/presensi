@@ -1767,30 +1767,47 @@ function isiRekap(d, kelas) {
       ringkas: `Hadir ${n.HADIR}, Terlambat ${n.TERLAMBAT}, Izin ${n.IZIN}, Alfa ${n.ALFA}, dari ${mhs.length} mahasiswa`,
     };
   });
-  // PERIZINAN: tiap sesi yang tidak dihadiri diberi keterangan; dua sesi dengan keterangan sama (alfa, atau satu izin sehari) jadi satu baris FULL DAY.
+  // PERIZINAN: keterangan tiap sesi yang tidak dihadiri, ditambah sesi yang dihadiri tetapi punya izin berjam khusus
+  // (izin sebagian, misalnya 09.00-11.40 lalu tetap presensi). Dua sesi berkunci sama (alfa, atau satu izin) = satu baris FULL DAY.
+  const cakupanBaris = c => (c === 'SEHARI' ? 'FULL DAY' : c);
+  const izinDi = (m, s) => izin.find(z => z.nim === m.nim && (z.cakupan === 'SEHARI' || z.cakupan === s));
+  const dariIzin = z => ({ kunci: z, z, izin: true, bukti: z.bukti[0] ? bukti('Bukti', z.bukti[0]) : '-',
+    alasan: `${z.jenis}: ${z.alasan}` + (z.catatan ? `\nCatatan admin: ${z.catatan}` : '') + (z.status === 'OK' ? '' : '\n(BELUM DIPERIKSA)') });
   const keterangan = (m, s, st) => {
+    if (st === 'HADIR' || st === 'TERLAMBAT') {
+      const z = izinDi(m, s);
+      if (!z || !z.jam || z.jam === JAM_PERIZINAN[cakupanBaris(z.cakupan)]) return null; // izin jam baku batal karena datang
+      const x = d.hadir.find(k => k.nim === m.nim && k.sesi === s && k.verifikasi !== 'TOLAK');
+      return { ...dariIzin(z), presensi: `${s} PUKUL ${x.jam.replace(':', '.')}` };
+    }
     if (st === 'IZIN') {
-      const z = izin.find(z => z.nim === m.nim && (z.cakupan === 'SEHARI' || z.cakupan === s));
-      if (!z) return { kunci: 'IZIN', izin: true, alasan: 'IZIN', bukti: '-' };
-      return { kunci: z, izin: true, jam: z.jam, bukti: z.bukti[0] ? bukti('Bukti', z.bukti[0]) : '-',
-        alasan: `${z.jenis}: ${z.alasan}` + (z.catatan ? `\nCatatan admin: ${z.catatan}` : '') + (z.status === 'OK' ? '' : '\n(BELUM DIPERIKSA)') };
+      const z = izinDi(m, s);
+      return z ? dariIzin(z) : { kunci: 'IZIN', izin: true, alasan: 'IZIN', bukti: '-' };
     }
     const ditolak = d.hadir.some(x => x.nim === m.nim && x.sesi === s && x.verifikasi === 'TOLAK');
     const alasan = ditolak ? 'TIDAK ADA KETERANGAN (PRESENSI DITOLAK)' : 'TIDAK ADA KETERANGAN';
     return { kunci: alasan, izin: false, alasan, bukti: '-' };
   };
   const absen = mhs.flatMap(m => {
-    const k = d.sesi.map((s, i) => (m.tiap[i] === 'IZIN' || m.tiap[i] === 'ALFA' ? keterangan(m, s, m.tiap[i]) : null));
+    const k = d.sesi.map((s, i) => keterangan(m, s, m.tiap[i]));
     const sehari = k.length === 2 && k[0] && k[1] && k[0].kunci === k[1].kunci;
-    return (sehari ? [['FULL DAY', k[0]]] : d.sesi.map((s, i) => [s, k[i]]).filter(([, x]) => x)).map(([cakupan, x]) => [m, cakupan, x]);
+    return (sehari ? [['FULL DAY', k]] : d.sesi.map((s, i) => [s, [k[i]]]).filter(([, xs]) => xs[0])).map(([cakupan, xs]) => {
+      const x = xs[0], hadir = xs.map(v => v.presensi).filter(Boolean);
+      // Jam pilihan mahasiswa hanya bila baris ini sama cakupannya dengan izinnya; sisa satu sesi dari izin sehari = jam baku sesi itu.
+      const jam = (x.z && cakupan === cakupanBaris(x.z.cakupan) && x.z.jam) || JAM_PERIZINAN[cakupan];
+      return { m, cakupan, jam, x, sebagian: hadir.length > 0,
+        alasan: x.alasan + (hadir.length ? `\n(TETAP PRESENSI ${hadir.join(' DAN ')})` : '') };
+    });
   });
-  const nIzin = absen.filter(([, , x]) => x.izin).length;
+  const n = { alfa: 0, izin: 0, sebagian: 0 };
+  for (const a of absen) n[a.sebagian ? 'sebagian' : a.x.izin ? 'izin' : 'alfa']++;
   lembar.push({
     nama: 'PERIZINAN', tata: TATA_PERIZINAN,
     judul: `PERIZINAN JAM KAMPUS ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
-    baris: absen.map(([m, cakupan, x], no) => [`${h} ${BULAN_REKAP[b - 1]} ${y}`, no + 1, m.nama.toUpperCase(), m.nim,
-      m.asal.toUpperCase(), m.kelas, cakupan, x.jam || JAM_PERIZINAN[cakupan], x.alasan, x.bukti]),
-    ringkas: absen.length ? `${absen.length} baris: ${absen.length - nIzin} alfa, ${nIzin} izin` : 'Semua mahasiswa hadir.',
+    baris: absen.map((a, no) => [`${h} ${BULAN_REKAP[b - 1]} ${y}`, no + 1, a.m.nama.toUpperCase(), a.m.nim,
+      a.m.asal.toUpperCase(), a.m.kelas, a.cakupan, a.jam, a.alasan, a.x.bukti]),
+    ringkas: absen.length ? `${absen.length} baris: ${n.alfa} alfa, ${n.izin} izin` +
+      (n.sebagian ? `, ${n.sebagian} izin sebagian (tetap presensi)` : '') : 'Semua mahasiswa hadir.',
   });
   return { nama: `PRESENSI JAM KAMPUS ${siapa} ${h} ${BULAN_REKAP[b - 1].slice(0, 3)} ${y}.xlsx`, lembar };
 }
