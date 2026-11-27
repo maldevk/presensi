@@ -250,16 +250,16 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   form, .terima { padding-inline: var(--space-lg); }
 }
 /* Yang baru muncul masuk dengan pudar dan turun singkat supaya tidak terasa patah; saat hilang langsung lenyap. */
-#form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info {
+#form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, #bidang-jam, #bantu-jam, .info {
   transition: opacity 200ms var(--ease-snap), translate 200ms var(--ease-snap);
 }
 @starting-style {
-  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info {
+  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, #bidang-jam, #bantu-jam, .info {
     opacity: 0; translate: 0 -6px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, .info,
+  #form, .panel, .pesan, .galat-isian, #pratinjau, .pratinjau-bukti img, .pemilik strong, .terima, #bidang-selesai, #bantu-selesai, #bidang-jam, #bantu-jam, .info,
   .mode button { transition: none; }
   .kerangka span, .btn--primary[aria-busy="true"]::before, .centang path { animation: none; }
   .mode button[aria-pressed="false"]:active { scale: none; }
@@ -368,6 +368,19 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
         </div>
       </div>
       <div class="bantu" id="bantu-selesai">Kosongkan "Sampai tanggal" untuk izin satu hari.</div>
+      <div class="dua" id="bidang-jam">
+        <div class="bidang">
+          <label for="jam-dari">Tidak hadir pukul</label>
+          <input id="jam-dari" type="time" aria-describedby="bantu-jam galat-jam-dari">
+          <p class="galat-isian" id="galat-jam-dari" hidden></p>
+        </div>
+        <div class="bidang">
+          <label for="jam-sampai">Sampai pukul</label>
+          <input id="jam-sampai" type="time" aria-describedby="bantu-jam galat-jam-sampai">
+          <p class="galat-isian" id="galat-jam-sampai" hidden></p>
+        </div>
+      </div>
+      <div class="bantu" id="bantu-jam">Ubah bila izinnya hanya sebagian jam, misalnya pulang pukul 11.40.</div>
       <div class="bidang">
         <label for="alasan">Alasan</label>
         <textarea id="alasan" maxlength="300" rows="3" placeholder="Contoh: demam sejak semalam, berobat ke klinik." aria-describedby="galat-alasan"></textarea>
@@ -486,7 +499,17 @@ $('cakupan').addEventListener('change', () => {
   $('bidang-selesai').hidden = !sehari;
   $('bantu-selesai').hidden = !sehari;
   $('label-mulai').textContent = sehari ? 'Dari tanggal' : 'Tanggal';
+  aturJam(true);
 });
+// Jam izin hanya untuk satu tanggal: terisi jam baku sesi yang dipilih, diubah bila izinnya hanya sebagian jam.
+const JAM_BAKU = { SEHARI: ['09:00', '16:00'], PAGI: ['09:00', '12:00'], SORE: ['12:00', '16:00'] };
+const satuTanggal = () => $('cakupan').value !== 'SEHARI' || !$('selesai').value || $('selesai').value === $('mulai').value;
+function aturJam(isiUlang) {
+  $('bidang-jam').hidden = $('bantu-jam').hidden = !satuTanggal();
+  if (isiUlang) [$('jam-dari').value, $('jam-sampai').value] = JAM_BAKU[$('cakupan').value] || JAM_BAKU.SEHARI;
+}
+for (const id of ['mulai', 'selesai']) $(id).addEventListener('input', () => aturJam(false));
+aturJam(true);
 const hariIni = new Date();
 $('mulai').value = [hariIni.getFullYear(), String(hariIni.getMonth() + 1).padStart(2, '0'),
   String(hariIni.getDate()).padStart(2, '0')].join('-');
@@ -660,12 +683,16 @@ async function kirimIzin() {
   const sehari = $('cakupan').value === 'SEHARI';
   const data = { nim: pemilik.nim, jenis: $('jenis').value, cakupan: $('cakupan').value, mulai: $('mulai').value,
     selesai: sehari ? $('selesai').value || $('mulai').value : $('mulai').value, alasan: $('alasan').value.trim(), bukti: buktiBase64 };
+  const [dari, sampai, satu] = [$('jam-dari').value, $('jam-sampai').value, satuTanggal()];
+  data.jam = satu ? `${dari}-${sampai}` : '';
   // Semua galat ditampilkan sekaligus; id isian pertama yang salah dikembalikan untuk difokuskan.
   const salah = [
     ['jenis', !data.jenis && 'Pilih jenis izin.'],
     ['mulai', !data.mulai && 'Isi tanggal izin.'],
     ['selesai', data.selesai < data.mulai && '"Sampai tanggal" tidak boleh sebelum "Dari tanggal".'],
     ['alasan', !data.alasan && 'Tulis alasan izin, misalnya "demam, berobat ke klinik".'],
+    ['jam-dari', satu && !dari && 'Isi jam mulai izin.'],
+    ['jam-sampai', satu && (!sampai ? 'Isi jam selesai izin.' : dari && sampai <= dari && 'Jam selesai harus sesudah jam mulai.')],
     ['bukti', !data.bukti.length && 'Pilih 1 sampai 3 foto bukti.'],
   ].filter(([id, teks]) => galatIsian(id, teks || ''));
   if (salah.length) return salah[0][0];
@@ -676,13 +703,13 @@ async function kirimIzin() {
     tampilPesan('');
     if (r.tolak) return tampilPesan(r.tolak);
     tampilTerima('Izin tercatat.', [['Nama', r.nama], ['NIM', r.nim], ['Jenis', r.jenis], ['Berlaku', r.cakupan],
-      ['Tanggal', r.mulai === r.selesai ? r.mulai : `${r.mulai} s.d. ${r.selesai}`], ['Nomor', r.id]]);
+      ['Tanggal', r.mulai === r.selesai ? r.mulai : `${r.mulai} s.d. ${r.selesai}`], ...(r.jam ? [['Pukul', r.jam]] : []), ['Nomor', r.id]]);
   } catch (err) {
     tampilPesan('Belum terkirim karena server ramai atau sinyal lemah. Tekan Ajukan izin lagi.');
   }
 }
 
-const ISIAN = ['nim', 'foto', 'jenis', 'cakupan', 'mulai', 'selesai', 'alasan', 'bukti', 'kirim', 'mode-presensi', 'mode-izin'];
+const ISIAN = ['nim', 'foto', 'jenis', 'cakupan', 'mulai', 'selesai', 'jam-dari', 'jam-sampai', 'alasan', 'bukti', 'kirim', 'mode-presensi', 'mode-izin'];
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   if (!pemilik || pemilik.nim !== $('nim').value) {

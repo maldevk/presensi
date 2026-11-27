@@ -918,7 +918,7 @@ function barisIzin(x) {
   const isi = el('div', 'isi');
   const tanggal = x.mulai === x.selesai ? x.mulai : `${x.mulai} s.d. ${x.selesai}`;
   isi.append(el('div', 'nama', x.nama), el('div', 'ket', `${x.nim}, kelas ${x.kelas}, diajukan ${x.diajukan}`),
-    el('div', '', `${x.jenis}, ${NAMA_CAKUPAN[x.cakupan] || x.cakupan}, ${tanggal}`), el('div', 'alasan', x.alasan));
+    el('div', '', `${x.jenis}, ${NAMA_CAKUPAN[x.cakupan] || x.cakupan}, ${tanggal}` + (x.jam ? `, pukul ${x.jam}` : '')), el('div', 'alasan', x.alasan));
   const bukti = el('div', 'bukti');
   x.bukti.forEach((id, i) => bukti.append(tombolFoto(id, `Lihat bukti ${i + 1} ${x.nama}`, `Bukti ${i + 1}: ${x.nama}`,
     `${x.jenis}, ${tanggal}. ${x.alasan}`)));
@@ -1738,7 +1738,7 @@ const TATA_PERIZINAN = {
     'PERIZINAN SORE/PAGI PADA PUKUL', 'ALASAN', 'BUKTI'],
   lebar: [15, 5, 28, 16, 16, 7, 16, 16, 30, 17], tinggi: 90, foto: 80, kiri: [2, 8], arah: 'landscape',
 };
-// shortcut: jam baku seperti di berkas lapangan; jam khusus (misalnya 09.00-11.40) tetap diubah tangan, karena izin tidak mencatat jam.
+// Jam baku seperti di berkas lapangan, untuk alfa dan izin tanpa jam (izin beberapa hari, atau diajukan sebelum ada isian jam).
 const JAM_PERIZINAN = { PAGI: '09.00-12.00', SORE: '12.00-16.00', 'FULL DAY': '09.00-16.00' };
 const tautanDrive = id => `https://drive.google.com/file/d/${encodeURIComponent(id)}/view`;
 
@@ -1772,7 +1772,7 @@ function isiRekap(d, kelas) {
     if (st === 'IZIN') {
       const z = izin.find(z => z.nim === m.nim && (z.cakupan === 'SEHARI' || z.cakupan === s));
       if (!z) return { kunci: 'IZIN', izin: true, alasan: 'IZIN', bukti: '-' };
-      return { kunci: z, izin: true, bukti: z.bukti[0] ? bukti('Bukti', z.bukti[0]) : '-',
+      return { kunci: z, izin: true, jam: z.jam, bukti: z.bukti[0] ? bukti('Bukti', z.bukti[0]) : '-',
         alasan: `${z.jenis}: ${z.alasan}` + (z.catatan ? `\nCatatan admin: ${z.catatan}` : '') + (z.status === 'OK' ? '' : '\n(BELUM DIPERIKSA)') };
     }
     const ditolak = d.hadir.some(x => x.nim === m.nim && x.sesi === s && x.verifikasi === 'TOLAK');
@@ -1789,7 +1789,7 @@ function isiRekap(d, kelas) {
     nama: 'PERIZINAN', tata: TATA_PERIZINAN,
     judul: `PERIZINAN JAM KAMPUS ${d.angkatan} ${siapa} ${hari} ${h} ${BULAN_REKAP[b - 1]} ${y}`,
     baris: absen.map(([m, cakupan, x], no) => [`${h} ${BULAN_REKAP[b - 1]} ${y}`, no + 1, m.nama.toUpperCase(), m.nim,
-      m.asal.toUpperCase(), m.kelas, cakupan, JAM_PERIZINAN[cakupan], x.alasan, x.bukti]),
+      m.asal.toUpperCase(), m.kelas, cakupan, x.jam || JAM_PERIZINAN[cakupan], x.alasan, x.bukti]),
     ringkas: absen.length ? `${absen.length} baris: ${absen.length - nIzin} alfa, ${nIzin} izin` : 'Semua mahasiswa hadir.',
   });
   return { nama: `PRESENSI JAM KAMPUS ${siapa} ${h} ${BULAN_REKAP[b - 1].slice(0, 3)} ${y}.xlsx`, lembar };
