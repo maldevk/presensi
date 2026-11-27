@@ -372,14 +372,15 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
         <div class="bidang">
           <label for="jam-dari">Tidak hadir pukul</label>
           <input id="jam-dari" type="time" aria-describedby="bantu-jam galat-jam-dari">
-          <p class="galat-isian" id="galat-jam-dari" hidden></p>
         </div>
         <div class="bidang">
           <label for="jam-sampai">Sampai pukul</label>
           <input id="jam-sampai" type="time" aria-describedby="bantu-jam galat-jam-sampai">
-          <p class="galat-isian" id="galat-jam-sampai" hidden></p>
         </div>
       </div>
+      <!-- Galat jam selebar formulir: pesan cakupan terlalu panjang untuk setengah kolom. -->
+      <p class="galat-isian" id="galat-jam-dari" hidden></p>
+      <p class="galat-isian" id="galat-jam-sampai" hidden></p>
       <div class="bantu" id="bantu-jam">Ubah bila izinnya hanya sebagian jam, misalnya pulang pukul 11.40.</div>
       <div class="bidang">
         <label for="alasan">Alasan</label>
@@ -506,7 +507,10 @@ const JAM_BAKU = { SEHARI: ['09:00', '16:00'], PAGI: ['09:00', '12:00'], SORE: [
 const satuTanggal = () => $('cakupan').value !== 'SEHARI' || !$('selesai').value || $('selesai').value === $('mulai').value;
 function aturJam(isiUlang) {
   $('bidang-jam').hidden = $('bantu-jam').hidden = !satuTanggal();
-  if (isiUlang) [$('jam-dari').value, $('jam-sampai').value] = JAM_BAKU[$('cakupan').value] || JAM_BAKU.SEHARI;
+  if (!isiUlang) return;
+  [$('jam-dari').value, $('jam-sampai').value] = JAM_BAKU[$('cakupan').value] || JAM_BAKU.SEHARI;
+  galatIsian('jam-dari', '');
+  galatIsian('jam-sampai', ''); // galat jam lama tidak berlaku untuk cakupan baru
 }
 for (const id of ['mulai', 'selesai']) $(id).addEventListener('input', () => aturJam(false));
 aturJam(true);
@@ -679,6 +683,20 @@ async function kirimPresensi() {
   }
 }
 
+/**
+ * Jam izin harus sesuai cakupannya; batas Pagi dan Sore pukul 12.00, sama dengan jam baku di halaman izin.
+ * Salinan dari Code.gs; ubah keduanya. Hasil: pesan galat, atau '' bila cocok.
+ */
+function cekJamCakupan_(cakupan, jam) {
+  const [a, b] = jam.replace(/\./g, ':').split('-');
+  const ke = s => `Pilih "${s}", atau ubah jamnya.`;
+  if (cakupan === 'SEHARI' && b <= '12:00') return `Jam ${jam} hanya mencakup sesi Pagi. ${ke('Setengah hari, sesi Pagi')}`;
+  if (cakupan === 'SEHARI' && a >= '12:00') return `Jam ${jam} hanya mencakup sesi Sore. ${ke('Setengah hari, sesi Sore')}`;
+  if (cakupan === 'PAGI' && b > '12:00') return `Jam ${jam} melewati pukul 12.00. ${ke('Sehari penuh (Pagi dan Sore)')}`;
+  if (cakupan === 'SORE' && a < '12:00') return `Jam ${jam} dimulai sebelum pukul 12.00. ${ke('Sehari penuh (Pagi dan Sore)')}`;
+  return '';
+}
+
 async function kirimIzin() {
   const sehari = $('cakupan').value === 'SEHARI';
   const data = { nim: pemilik.nim, jenis: $('jenis').value, cakupan: $('cakupan').value, mulai: $('mulai').value,
@@ -692,7 +710,8 @@ async function kirimIzin() {
     ['selesai', data.selesai < data.mulai && '"Sampai tanggal" tidak boleh sebelum "Dari tanggal".'],
     ['alasan', !data.alasan && 'Tulis alasan izin, misalnya "demam, berobat ke klinik".'],
     ['jam-dari', satu && !dari && 'Isi jam mulai izin.'],
-    ['jam-sampai', satu && (!sampai ? 'Isi jam selesai izin.' : dari && sampai <= dari && 'Jam selesai harus sesudah jam mulai.')],
+    ['jam-sampai', satu && (!sampai ? 'Isi jam selesai izin.' : dari && (sampai <= dari ? 'Jam selesai harus sesudah jam mulai.'
+      : cekJamCakupan_(data.cakupan, `${dari}-${sampai}`.replace(/:/g, '.'))))],
     ['bukti', !data.bukti.length && 'Pilih 1 sampai 3 foto bukti.'],
   ].filter(([id, teks]) => galatIsian(id, teks || ''));
   if (salah.length) return salah[0][0];
